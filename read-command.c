@@ -48,7 +48,15 @@ make_command_stream (int (*get_next_byte) (void *),
 command_t
 read_command_stream (command_stream_t s)
 {
-  /* FIXME: Replace this with your implementation too.  */
-  error (1, 0, "command reading not yet implemented");
-  return 0;
+
+  /* Reading a command returns only one command. If command is returned,
+     we must increment the iterator to point to the next command. */
+
+  //If the iterator reaches the end of the array of commands, return NULL
+  if(s->iter == s->commands_size) {
+	s->iter = 0;
+	return NULL;
+  }
+  else
+	return s->commands[s->iter++];
 }
