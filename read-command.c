@@ -26,6 +26,14 @@
 /* FIXME: Define the type 'struct command_stream' here.  This should
    complete the incomplete type declaration in command.h.  */
 
+typedef struct command_stream {
+	command_t *commands;
+	int iter;
+	int commands_size;
+	int alloc_size;
+
+}command_stream;
+
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
