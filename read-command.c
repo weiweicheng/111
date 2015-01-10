@@ -34,6 +34,33 @@ typedef struct command_stream {
 
 }command_stream;
 
+bool word_char(char c) {
+
+	// check if c is alphanumeric or within allowed set of special characters
+
+	if(isalnum(c))
+		return true;
+	else if (c == '!' || c == '%' || c == '+' || c == ',' || c == '-' || c == '.' || c == '/' || c == ':' || c == '@' || c == '^' || c == '_')
+		return true;
+	else
+		return false;
+}
+
+char* append_char(char c, char *sequence, size_t *sequence_len, size_t *sequence_size) {
+	// append character to sequence
+	sequence[(*sequence_len)] = c;
+	(*sequence_len)++;
+
+	// check if we have filled allocated size, if so allocate more space
+	if((*sequence_len) == (*sequence_size)) {
+		(*sequence_size) += 512;
+		checked_realloc(*sequence, 512);
+		bzero(sequence+(*sequence_len), 512);
+	}
+
+	return sequence;
+}
+
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
