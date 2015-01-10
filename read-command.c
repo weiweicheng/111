@@ -101,11 +101,8 @@ make_command_stream (int (*get_next_byte) (void *),
 			total_lines_processed++;
 			continue;
 		}
-
 	}
-
-
-  return 0;
+  	return 0;
 }
 
 command_t
