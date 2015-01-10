@@ -63,8 +63,7 @@ char* append_char(char c, char *sequence, size_t *sequence_len, size_t *sequence
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
-		     void *get_next_byte_argument)
-{
+		     void *get_next_byte_argument) {
 
 	/* A sequence will be defined as one line of code, from beginning to end statement */
 
@@ -91,22 +90,19 @@ make_command_stream (int (*get_next_byte) (void *),
 
 	bool in_comment = false;
 
-	while((current = get_next_byte(get_next_byte_argument) != EOF)
-		{
-			/* A newline at the beginning of a sequence should be skipped */
-			if(current == '\n' && sequence_processed_size == 0 && in_comment == false)
-				{
-					total_lines_processed++;
-					continue;
-				}
-
-			else if(current == '\n' && num_of_left_parens > 0 && num_of_left_parens == num_of_right_parens)
-				{
-					total_lines_processed++;
-					continue;
-				}
-
+	while((current = get_next_byte(get_next_byte_argument)) != EOF) {
+		/* A newline at the beginning of a sequence should be skipped */
+		if(current == '\n' && sequence_processed_size == 0 && in_comment == false) {
+			total_lines_processed++;
+			continue;
 		}
+
+		else if(current == '\n' && num_of_left_parens > 0 && num_of_left_parens == num_of_right_parens) {
+			total_lines_processed++;
+			continue;
+		}
+
+	}
 
 
   return 0;
