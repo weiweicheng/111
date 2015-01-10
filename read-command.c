@@ -65,10 +65,50 @@ command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
 {
-  /* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
-  error (1, 0, "command reading not yet implemented");
+
+	/* A sequence will be defined as one line of code, from beginning to end statement */
+
+	/* Initialize the command_stream with 16 possible commands */
+	command_stream_t sequence_stream = checked_malloc(sizeof(struct command_stream));
+	sequence_stream->commands = checked_malloc(16*sizeof(struct command_t));
+	sequence_stream->iter = 0;
+	sequence_stream->commands_size = 0;
+	sequence_stream->alloc_size = 16;
+
+	/* We need to create a buffer for the input that we are reading in.*/
+
+	size_t sequence_buf_size = 512;
+	size_t sequence_processed_size = 0;
+
+	char *sequence_buf = checked_malloc(sequence_buf_size*sizeof(char));
+	bzero(sequence_buf, sequence_buf_size*sizeof(char));
+
+	char current;
+	size_t total_lines_processed = 0;
+	size_t current_line = 0;
+	size_t num_of_left_parens = 0;
+	size_t num_of_right_parens = 0;
+
+	bool in_comment = false;
+
+	while((current = get_next_byte(get_next_byte_argument) != EOF)
+		{
+			/* A newline at the beginning of a sequence should be skipped */
+			if(current == '\n' && sequence_processed_size == 0 && in_comment == false)
+				{
+					total_lines_processed++;
+					continue;
+				}
+
+			else if(current == '\n' && num_of_left_parens > 0 && num_of_left_parens == num_of_right_parens)
+				{
+					total_lines_processed++;
+					continue;
+				}
+
+		}
+
+
   return 0;
 }
 
