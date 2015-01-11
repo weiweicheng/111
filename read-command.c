@@ -138,39 +138,48 @@ make_command_stream (int (*get_next_byte) (void *),
 	size_t num_of_open_parens = 0;
 	size_t num_of_close_parens = 0;
 
-	keyword *keyword_stream = checked_malloc(sizeof(keyword)*64);
+	keyword *keyword_stream = checked_malloc(sizeof(struct keyword)*64);
 	size_t keyword_iterator = 0;
-	
+	size_t keyword_alloc_size = 64;
 
-	while(current_c != '\0') {
+
+	while((current_c = *(input_stream+input_iterator)) != '\0') {
+		//printf("%c", current_c);
+		//TODO Need to reallocate keyword_stream
+		if (keyword_iterator == keyword_alloc_size)
+		{
+			keyword_alloc_size += 64;
+			keyword_stream = checked_realloc (keyword_stream, keyword_alloc_size*sizeof(struct keyword));
+			memset (keyword_stream + keyword_iterator, '\0', 64*sizeof(struct keyword));
+		}
 		switch(current_c) {
 		     case '\n':
-			current_line++;
-			int counter = 1;
-			while (input_stream[input_iterator+counter] == '\n') {
-				current_line++;
-		 	 	counter++;
-			}
-	   		input_iterator	+= counter-1;
-			break;
+					current_line++;
+					int counter = 1;
+					while (input_stream[input_iterator+counter] == '\n') {
+						current_line++;
+		 	 			counter++;
+					}
+	   			input_iterator	+= counter-1;
+					break;
 		     /*Comments cannot occur before a word or token */
-		     case '#': 
-	 		if (input_iterator != 0 && ((word_char(input_stream[input_iterator-1])) || (token_char(&input_stream[input_iterator-1])))) {
-				fprintf(stderr, "A comment character (#) cannot follow a word character or token character"); //WE NEED THE LINES
-				exit(1);
-				continue;
-			}
-			counter = 1;
-			while ((input_stream[input_iterator+counter] != '\n') && (input_stream[input_iterator+counter] != '\0')) 
-			  	counter++; //we are in a comment
-			input_iterator	+= counter;
-				continue;
+		     case '#':
+	 				if (input_iterator != 0 && ((word_char(input_stream[input_iterator-1])) || (token_char(&input_stream[input_iterator-1])))) {
+						fprintf(stderr, "A comment character (#) cannot follow a word character or token character"); //WE NEED THE LINES
+						exit(1);
+						continue;
+					}
+					counter = 1;
+					while ((input_stream[input_iterator+counter] != '\n') && (input_stream[input_iterator+counter] != '\0'))
+			  		counter++; //we are in a comment
+					input_iterator	+= counter;
+					continue;
 		     case ' ':
 		     case '\t':
-			input_iterator++;
-			continue;
+					input_iterator++;
+					continue;
 		     default:
-			break;
+					break;
 		}
 
 
@@ -184,12 +193,13 @@ make_command_stream (int (*get_next_byte) (void *),
 			keyword_stream[keyword_iterator].type = WORD;
 			keyword_stream[keyword_iterator].word = checked_malloc(sizeof(char)*(word_len+1));
 			bzero(keyword_stream[keyword_iterator].word, sizeof(char)*(word_len+1));
-			char* word_start = keyword_stream[keyword_iterator].word;							
-			for(; word_len > 0; word_start++, beginning_of_word++) {
-				*word_start = *(input_stream+beginning_of_word);
-				word_len--;
-			} //Last character is automatically a zero byte
+			int i=0;
+			for(i; i < word_len-1; i++) {
+				keyword_stream[keyword_iterator].word[i]=*(input_stream+beginning_of_word+i);
+			}
+			//printf("Index %d: %s\n", (int) keyword_iterator, keyword_stream[keyword_iterator].word);
 			keyword_iterator++;
+			current_c = *(input_stream+input_iterator);
 			continue;
 		}
 		else if(token_char(&current_c)) {
@@ -222,10 +232,43 @@ make_command_stream (int (*get_next_byte) (void *),
 				default:
 					break;
 			}
+		//	printf("Index %d: %d\n", (int) keyword_iterator, (int) keyword_stream[keyword_iterator].type);
 			keyword_iterator++;
+			input_iterator++;
 			continue;
 		}
+	input_iterator++; //Check later
+	} //END-WHILE
 
+
+
+
+	size_t i=0;
+	for(;i<keyword_iterator;i++)
+	{
+			switch(	keyword_stream[i].type) {
+				case SEQUENCE:
+			 	printf("SEQUENCE\n");
+				break;
+				case PIPELINE:
+				printf("PIPELINE\n");
+				break;
+				case OPEN_PARENS:
+				printf("OPEN_PARENS\n");
+				break;
+				case CLOSE_PARENS:
+				printf("CLOSE_PARENS\n");
+				break;
+				case INPUT:
+				printf("INPUT\n");
+				break;
+				case OUTPUT:
+				printf("OUTPUT\n");
+				break;
+				case WORD:
+				printf("%s\n",keyword_stream[i].word);
+				break;
+			}
 	}
   	return sequence_stream;
 }
@@ -260,7 +303,7 @@ int status;
 	command_t new_command = checked_malloc(sizeof(struct command));
 
 	char const *token = get_pivot_token (sequence);
-  	char const *first_string; 
+  	char const *first_string;
  	char const *second_string;
   	char *first_command;
   	char *second_command;
@@ -268,7 +311,7 @@ int status;
   	size_t second_string_size;
 
   	enum command_type token_type = token_to_command(token);
-	
+
   	if(token == NULL) // No tokens found, SIMPLE_COMMAND
    	 {
 	     	 first_string = sequence;
@@ -290,7 +333,7 @@ int status;
 	    new_command->input = NULL;
 	    new_command->output = NULL;
 
-	    //Need to handle subshell commands 
+	    //Need to handle subshell commands
 	    switch (cmd->type)
 	      {
 		case SEQUENCE_COMMAND:
@@ -320,7 +363,7 @@ int status;
 		    break;
 		  }
 		default: break;
-	      } 
+	      }
 	  return new_command;
 } */
 
