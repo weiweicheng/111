@@ -17,7 +17,14 @@
 
 #include "command.h"
 #include "command-internals.h"
+#include "alloc.h"
 
+#include <stdlib.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stddef.h>
 #include <error.h>
 
 /* FIXME: You may need to add #include directives, macro definitions,
@@ -54,7 +61,7 @@ char* append_char(char c, char *sequence, size_t *sequence_len, size_t *sequence
 	// check if we have filled allocated size, if so allocate more space
 	if((*sequence_len) == (*sequence_size)) {
 		(*sequence_size) += 512;
-		checked_realloc(*sequence, 512);
+		checked_realloc(sequence, 512);
 		bzero(sequence+(*sequence_len), 512);
 	}
 
@@ -69,7 +76,7 @@ make_command_stream (int (*get_next_byte) (void *),
 
 	/* Initialize the command_stream with 16 possible commands */
 	command_stream_t sequence_stream = checked_malloc(sizeof(struct command_stream));
-	sequence_stream->commands = checked_malloc(16*sizeof(struct command_t));
+	sequence_stream->commands = checked_malloc(16*sizeof(command_t));
 	sequence_stream->iter = 0;
 	sequence_stream->commands_size = 0;
 	sequence_stream->alloc_size = 16;
@@ -90,7 +97,7 @@ make_command_stream (int (*get_next_byte) (void *),
 
 	bool in_comment = false;
 
-	while((current = get_next_byte(get_next_byte_argument)) != EOF) {
+	while((current_c = get_next_byte(get_next_byte_argument)) != EOF) {
 		/* A newline at the beginning of a sequence should be skipped */
 		if(current_c == '\n' && sequence_processed_size == 0 && in_comment == false) {
 			total_lines_processed++;
@@ -100,18 +107,18 @@ make_command_stream (int (*get_next_byte) (void *),
 		else if(current_c == '\n' && num_of_left_parens > 0 && num_of_left_parens == num_of_right_parens) {
 			total_lines_processed++;
 			sequence_buf = append_char(';', sequence_buf, &sequence_processed_size, &sequence_buf_size);
-			sequence_buf = append_char(current, sequence_buf, &sequence_processed_size, &sequence_buf_size);
+			sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
 			continue;
 		}
 
-		else if(current_c != '\n' && current_c != '#' && in_comment = false)
+		else if(current_c != '\n' && current_c != '#' && in_comment == false)
 		{
 			sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
-			if (current_c = '(')
+			if (current_c == '(')
 				{
 					num_of_left_parens++;
 				}
-			else if (current_c = ')')
+			else if (current_c == ')')
 				{
 					num_of_right_parens++;
 				}
@@ -120,20 +127,20 @@ make_command_stream (int (*get_next_byte) (void *),
 		else if(current_c == '#')
 		{
 			//if previous character was a word or token, not a comment
-			if (word_char(*sequence_buf+sequence_proccessed_size-1) || token_char(*sequence_buf+sequence_proccessed_size-1))
+			if (word_char(*sequence_buf+sequence_proccessed_size-1) || token_char(*sequence_buf+sequence_processed_size-1))
 				sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
 			else
 				in_comment = true;
 		}
 
-		else if (current_c == '\n' || (current == ';''' && num_of_left_parens == num_of_right_parens))
+		else if (current_c == '\n' || (current_c == ';' && num_of_left_parens == num_of_right_parens))
 		{
 			if (current_c == '\n')
 				current_line++;
 
 			if (current_c == '\n' && in_comment)
 			{
-				in_comment == false;
+				in_comment = false;
 				sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
 			}
 			else if (current_c == ';' && in_comment)
