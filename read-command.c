@@ -96,7 +96,7 @@ bool valid_seq(char * const sequence) {
 		if(i[0] == ' ')
 			continue;		// make sure you don't have to exit word here
 
-		if(sequence[i] == '\n')
+		if(i[0] == '\n')
 			; //idk
 
 		// Look at word chars?
@@ -206,7 +206,7 @@ make_command_stream (int (*get_next_byte) (void *),
 				continue;
 
 		}
-	}
+	} 
   	return sequence_stream;
 }
 
@@ -238,6 +238,70 @@ int status;
 
 command_t make_command(const char * const sequence) {	// later do line number stuff, not yet pls
 	command_t new_command = checked_malloc(sizeof(struct command));
+
+	/*char const *token = get_pivot_token (sequence);
+  	char const *first_string; 
+ 	char const *second_string;
+  	char *first_command;
+  	char *second_command;
+  	size_t first_string_size;
+  	size_t second_string_size;
+
+  	enum command_type token_type = token_to_command(token);
+	
+  	if(token == NULL) // No tokens found, SIMPLE_COMMAND
+   	 {
+	     	 first_string = sequence;
+	      	 first_string_size = strlen(first_string) + 1;
+	      	 second_string = NULL;
+	      	 second_string_size = 0;
+    	 }
+  	else
+   	 {
+	      first_string = sequence;
+	      first_string_size = (token - first_string) + 1; // Leave space for the null byte
+
+	      second_string = token + 1;
+	      second_string_size = strlen(second_string) + 1;
+	 }
+
+	    new_command->type = token_type;
+	    new_command->status = -1;
+	    new_command->input = NULL;
+	    new_command->output = NULL;
+
+	    /* Need to handle subshell commands 
+	    switch (cmd->type)
+	      {
+		case SEQUENCE_COMMAND:
+		case OR_COMMAND:
+		case AND_COMMAND:
+		case PIPE_COMMAND:
+		  {
+		    1st_command = checked_malloc (sizeof (char) * 1st_string);
+		    memcpy (1st_command, 1st_string, 1st_string_size);
+		    1st_command[1st_string_size-1] = '\0';
+
+		    2nd_command = checked_malloc (sizeof (char) * 2nd_string_size);
+		    strcpy (2nd_command, 2nd_string);
+
+		    new_command->u.command[0] = make_command (1st_command);
+		    new_command->u.command[1] = make_command (2nd_command);
+
+		    free (1st_command);
+		    free (2nd_command);
+		    break;
+		  }
+		case SIMPLE_COMMAND:
+		  {
+		    char *stripped_expr = handle_and_strip_file_redirects (sequence, new_command, false);
+		    split_expression_by_token (new_command, stripped_expr, ' ', p_line_number);
+		    free(stripped_expr);
+		    break;
+		  }
+		default: break;
+	      } */
+	  return new_command;
 }
 
 command_t
