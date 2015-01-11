@@ -90,11 +90,14 @@ bool valid_seq(char * const sequence) {
 		// check for invalid?? tokens and words do not share characters (all are distinct)
 
 		bool in_word = false; 		// Keep track of if currently in a word
-		bool after_token = false;	// See if directly prior, have seen token		
+		bool after_token = false;	// See if directly prior, have seen token
 
 		// Spaces are ignored
 		if(i[0] == ' ')
 			continue;		// make sure you don't have to exit word here
+
+		if(sequence[i] == '\n')
+			; //idk
 
 		// Look at word chars?
 		else if(word_char(i[0])) {
@@ -205,6 +208,36 @@ make_command_stream (int (*get_next_byte) (void *),
 		}
 	}
   	return sequence_stream;
+}
+
+// IMPORTANT!!!!!!!! Before calling, make sure you make a copy that's safe to modify of line_number
+
+/* FOR REFERENCE
+
+struct command {
+	enum command_type type;
+
+// Exit status, or -1 if not known (e.g., because it has not exited yet).
+int status;
+
+// I/O redirections, or null if none.
+	char *input;
+	char *output;
+
+	union {
+// For SIMPLE_COMMAND.
+	char **word;
+
+// For all other kinds of commands.  Trailing entries are unused.
+// Only IF_COMMAND uses all three entries.
+	struct command *command[3];
+	} u;
+};
+
+*/
+
+command_t make_command(const char * const sequence) {	// later do line number stuff, not yet pls
+	command_t new_command = checked_malloc(sizeof(struct command));
 }
 
 command_t
