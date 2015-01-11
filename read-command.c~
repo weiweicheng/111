@@ -83,7 +83,7 @@ bool token_char(char *sequence) {
 	}
 }
 
-bool valid_seq(char * const sequence) {
+bool valid_seq(const char * const sequence) {
 	// Check to make sure there are no invalid characters
 	char *i;
 	for(i = &sequence[0]; *i; i++) {		// sequence is terminated by null byte
