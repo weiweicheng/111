@@ -138,7 +138,7 @@ make_command_stream (int (*get_next_byte) (void *),
 	char *sequence_buf = checked_malloc(sequence_buf_size*sizeof(char));
 	bzero(sequence_buf, sequence_buf_size*sizeof(char));
 
-	char current;
+	char current_c;
 	size_t total_lines_processed = 0;
 	size_t current_line = 0;
 	size_t num_of_left_parens = 0;
@@ -148,18 +148,57 @@ make_command_stream (int (*get_next_byte) (void *),
 
 	while((current = get_next_byte(get_next_byte_argument)) != EOF) {
 		/* A newline at the beginning of a sequence should be skipped */
-		if(current == '\n' && sequence_processed_size == 0 && in_comment == false) {
+		if(current_c == '\n' && sequence_processed_size == 0 && in_comment == false) {
 			total_lines_processed++;
 			continue;
 		}
 
-		else if(current == '\n' && num_of_left_parens > 0 && num_of_left_parens == num_of_right_parens) {
+		else if(current_c == '\n' && num_of_left_parens > 0 && num_of_left_parens == num_of_right_parens) {
 			total_lines_processed++;
+			sequence_buf = append_char(';', sequence_buf, &sequence_processed_size, &sequence_buf_size);
+			sequence_buf = append_char(current, sequence_buf, &sequence_processed_size, &sequence_buf_size);
 			continue;
 		}
-		// append_char(current, sequence_buf, *****len, ******size);
+
+		else if(current_c != '\n' && current_c != '#' && in_comment = false)
+		{
+			sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
+			if (current_c = '(')
+				{
+					num_of_left_parens++;
+				}
+			else if (current_c = ')')
+				{
+					num_of_right_parens++;
+				}
+			continue;
+		}
+		else if(current_c == '#')
+		{
+			//if previous character was a word or token, not a comment
+			if (word_char(*sequence_buf+sequence_proccessed_size-1) || token_char(*sequence_buf+sequence_proccessed_size-1))
+				sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
+			else
+				in_comment = true;
+		}
+
+		else if (current_c == '\n' || (current == ';''' && num_of_left_parens == num_of_right_parens))
+		{
+			if (current_c == '\n')
+				current_line++;
+
+			if (current_c == '\n' && in_comment)
+			{
+				in_comment == false;
+				sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
+			}
+			else if (current_c == ';' && in_comment)
+				continue;
+
+		}
+>>>>>>> 29386715ebf62fb90194095e3f66b8a30bf13636
 	}
-  	return 0;
+  	return sequence_stream;
 }
 
 command_t
