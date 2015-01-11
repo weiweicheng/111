@@ -83,27 +83,18 @@ bool token_char(char *sequence) {
 	}
 }
 
-bool valid_seq(char * const sequence) {
+bool valid_seq(const char * const sequence) {
 	// Check to make sure there are no invalid characters
 	char *i;
 	for(i = &sequence[0]; *i; i++) {		// sequence is terminated by null byte
 		// check for invalid?? tokens and words do not share characters (all are distinct)
 
 		bool in_word = false; 		// Keep track of if currently in a word
-		bool after_token = false;	// See if directly prior, have seen token
+		bool after_token = false;	// See if directly prior, have seen token		
 
 		// Spaces are ignored
 		if(i[0] == ' ')
 			continue;		// make sure you don't have to exit word here
-
-		if(sequence[i] == '\n')
-			; //idk, but note that newline can only follow ; | ( ) and simple commands
-
-		// Look at word chars?
-		else if(word_char(sequence[i])) {	// likely, you skip over words in the validating stage
-
-		if(i[0] == '\n')
-			; //idk
 
 		// Look at word chars?
 		else if(word_char(i[0])) {
@@ -111,10 +102,6 @@ bool valid_seq(char * const sequence) {
 			in_word = true;
 			continue;
 		}
-
-		else if(token_char(sequence[i])) {
-			if(!in_word && sequence[i] != '(' && *sequence != ';')
-				return false; 		// token cannot be first thing? except open paren&sequence? can we ever have a token directly following a token? certainly cannot have semicolon following semicolon
 
 		else if(token_char(i)) {
 			if(!in_word && i[0] != '(' && *sequence != ';')
@@ -216,126 +203,8 @@ make_command_stream (int (*get_next_byte) (void *),
 				continue;
 
 		}
-	} 
+	}
   	return sequence_stream;
-}
-
-command_type token_to_command(char *token) {
-	// A simple command contains no tokens
-	if(token == NULL)
-		return SIMPLE_COMMAND;
-
-	else if(*token == '|')
-		return PIPE_COMMAND;
-
-	else if(*token == ';')
-		return SEQUENCE_COMMAND;
-
-	else if(*token == '(' || *token == ')')
-		return SUBSHELL_COMMAND;
-
-	return SIMPLE_COMMAND; 		// dummy to appease compiler
-}
-
-char * lowest_precedence_token(char const* sequence) {
-	// In order of precedence (high to low): (), |, ;		IS SIMPLE HIGHEST?
-	
-	// First, look for lowest precedence
-
-}
-
-// IMPORTANT!!!!!!!! Before calling, make sure you make a copy that's safe to modify of line_number & pass that in
-
-/* FOR REFERENCE
-
-struct command {
-	enum command_type type;
-
-// Exit status, or -1 if not known (e.g., because it has not exited yet).
-int status;
-
-// I/O redirections, or null if none.
-	char *input;
-	char *output;
-
-	union {
-// For SIMPLE_COMMAND.
-	char **word;
-
-// For all other kinds of commands.  Trailing entries are unused.
-// Only IF_COMMAND uses all three entries.
-	struct command *command[3];
-	} u;
-};
-
-*/
-
-command_t make_command(const char * const sequence) {	// later do line number stuff, not yet pls
-	command_t new_command = checked_malloc(sizeof(struct command));
-
-	/*char const *token = get_pivot_token (sequence);
-  	char const *first_string; 
- 	char const *second_string;
-  	char *first_command;
-  	char *second_command;
-  	size_t first_string_size;
-  	size_t second_string_size;
-
-  	enum command_type token_type = token_to_command(token);
-	
-  	if(token == NULL) // No tokens found, SIMPLE_COMMAND
-   	 {
-	     	 first_string = sequence;
-	      	 first_string_size = strlen(first_string) + 1;
-	      	 second_string = NULL;
-	      	 second_string_size = 0;
-    	 }
-  	else
-   	 {
-	      first_string = sequence;
-	      first_string_size = (token - first_string) + 1; // Leave space for the null byte
-
-	      second_string = token + 1;
-	      second_string_size = strlen(second_string) + 1;
-	 }
-
-	    new_command->type = token_type;
-	    new_command->status = -1;
-	    new_command->input = NULL;
-	    new_command->output = NULL;
-
-	    /* Need to handle subshell commands 
-	    switch (cmd->type)
-	      {
-		case SEQUENCE_COMMAND:
-		case OR_COMMAND:
-		case AND_COMMAND:
-		case PIPE_COMMAND:
-		  {
-		    1st_command = checked_malloc (sizeof (char) * 1st_string);
-		    memcpy (1st_command, 1st_string, 1st_string_size);
-		    1st_command[1st_string_size-1] = '\0';
-
-		    2nd_command = checked_malloc (sizeof (char) * 2nd_string_size);
-		    strcpy (2nd_command, 2nd_string);
-
-		    new_command->u.command[0] = make_command (1st_command);
-		    new_command->u.command[1] = make_command (2nd_command);
-
-		    free (1st_command);
-		    free (2nd_command);
-		    break;
-		  }
-		case SIMPLE_COMMAND:
-		  {
-		    char *stripped_expr = handle_and_strip_file_redirects (sequence, new_command, false);
-		    split_expression_by_token (new_command, stripped_expr, ' ', p_line_number);
-		    free(stripped_expr);
-		    break;
-		  }
-		default: break;
-	      } */
-	  return new_command;
 }
 
 command_t
