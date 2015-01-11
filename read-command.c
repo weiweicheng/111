@@ -61,6 +61,62 @@ char* append_char(char c, char *sequence, size_t *sequence_len, size_t *sequence
 	return sequence;
 }
 
+bool token_char(char *sequence) {
+	// token can only be one of 6 characters
+	switch(*sequence) {
+		case ';':
+		case '|':
+		case '(':
+		case ')':
+		case '<':
+		case '>':
+			return true;
+		default:
+			return false;
+	}
+}
+
+bool valid_seq(const char *sequence) {
+	// Check to make sure there are no invalid characters
+	int i;
+	for(i = 0; sequence[i] != '\0'; i++) {		// sequence is terminated by null byte
+		// check for invalid?? tokens and words do not share characters (all are distinct)
+
+		bool in_word = false; 		// Keep track of if currently in a word
+		bool after_token = false;	// See if directly prior, have seen token		
+
+		// Spaces are ignored
+		if(sequence[i] == ' ')
+			continue;		// make sure you don't have to exit word here
+
+		// Look at word chars?
+		else if(word_char(sequence[i])) {
+			after_token = false;
+			in_word = true;
+			continue;
+		}
+
+		else if(token_char(sequence[i])) {
+			if(!in_word && sequence[i] != '(' && *sequence != ';')
+				return false; 		// token cannot be first thing? except open paren&sequence? can we ever have a token directly following a token?
+			in_word = false;
+			seen_token = true;
+			continue;
+		}
+	}
+
+	// Check to make sure number of parens match, and that the order is sensical
+	int open_paren = 0;
+	int close_paren = 0;
+	for(i = 0; *sequence[i] != '\0' || close_paren > open_paren; i++) {	// second exit condition may not be needed. check this! depends on implementation probably
+		if(*sequence[i] == '(')
+			open_paren++;
+		if(*sequence[i] == ')')
+			close_paren++;
+	}
+	return false;			// to appease compiler for now
+}
+
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument) {
@@ -101,6 +157,7 @@ make_command_stream (int (*get_next_byte) (void *),
 			total_lines_processed++;
 			continue;
 		}
+		// append_char(current, sequence_buf, *****len, ******size);
 	}
   	return 0;
 }
