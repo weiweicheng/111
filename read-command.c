@@ -96,12 +96,6 @@ bool valid_seq(char * const sequence) {
 		if(i[0] == ' ')
 			continue;		// make sure you don't have to exit word here
 
-		if(sequence[i] == '\n')
-			; //idk, but note that newline can only follow ; | ( ) and simple commands
-
-		// Look at word chars?
-		else if(word_char(sequence[i])) {	// likely, you skip over words in the validating stage
-
 		if(i[0] == '\n')
 			; //idk
 
@@ -111,10 +105,6 @@ bool valid_seq(char * const sequence) {
 			in_word = true;
 			continue;
 		}
-
-		else if(token_char(sequence[i])) {
-			if(!in_word && sequence[i] != '(' && *sequence != ';')
-				return false; 		// token cannot be first thing? except open paren&sequence? can we ever have a token directly following a token? certainly cannot have semicolon following semicolon
 
 		else if(token_char(i)) {
 			if(!in_word && i[0] != '(' && *sequence != ';')
@@ -220,31 +210,7 @@ make_command_stream (int (*get_next_byte) (void *),
   	return sequence_stream;
 }
 
-command_type token_to_command(char *token) {
-	// A simple command contains no tokens
-	if(token == NULL)
-		return SIMPLE_COMMAND;
-
-	else if(*token == '|')
-		return PIPE_COMMAND;
-
-	else if(*token == ';')
-		return SEQUENCE_COMMAND;
-
-	else if(*token == '(' || *token == ')')
-		return SUBSHELL_COMMAND;
-
-	return SIMPLE_COMMAND; 		// dummy to appease compiler
-}
-
-char * lowest_precedence_token(char const* sequence) {
-	// In order of precedence (high to low): (), |, ;		IS SIMPLE HIGHEST?
-	
-	// First, look for lowest precedence
-
-}
-
-// IMPORTANT!!!!!!!! Before calling, make sure you make a copy that's safe to modify of line_number & pass that in
+// IMPORTANT!!!!!!!! Before calling, make sure you make a copy that's safe to modify of line_number
 
 /* FOR REFERENCE
 
