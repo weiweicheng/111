@@ -196,7 +196,6 @@ make_command_stream (int (*get_next_byte) (void *),
 				continue;
 
 		}
->>>>>>> 29386715ebf62fb90194095e3f66b8a30bf13636
 	}
   	return sequence_stream;
 }
