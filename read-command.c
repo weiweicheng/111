@@ -41,6 +41,40 @@ typedef struct command_stream {
 
 }command_stream;
 
+enum keywordtype {
+	SEQUENCE,
+	PIPELINE,
+	OPEN_PARENS,
+	CLOSE_PARENS,
+	INPUT,
+	OUTPUT,
+	WORD,
+};
+
+typedef struct keyword {
+	char* word;
+	enum keywordtype type;
+}keyword;
+
+
+char *read_input(int (*get_next_byte) (void *), void *get_next_byte_argument) {
+	char char_c;
+	size_t sequence_alloc_size = 1024;
+	size_t buf_iterator = 0;
+	char *sequence_buf = checked_malloc(sequence_alloc_size*sizeof(char));
+	bzero(sequence_buf, sequence_alloc_size*sizeof(char));
+	while((char_c = get_next_byte(get_next_byte_argument)) != EOF) {
+		sequence_buf[buf_iterator++] = char_c;
+    		if (sequence_alloc_size == buf_iterator) {
+		  int old_alloc_size = sequence_alloc_size;
+     		  sequence_buf =  (char*) checked_grow_alloc(sequence_buf, &sequence_alloc_size);
+		  bzero(sequence_buf+old_alloc_size, old_alloc_size*sizeof(char));
+		}
+	}
+
+	return sequence_buf;
+}
+
 bool word_char(char c) {
 
 	// check if c is alphanumeric or within allowed set of special characters
@@ -52,6 +86,8 @@ bool word_char(char c) {
 	else
 		return false;
 }
+
+// Possibly no longer necssary
 
 char* append_char(char c, char *sequence, size_t *sequence_len, size_t *sequence_size) {
 	// append character to sequence
@@ -83,58 +119,67 @@ bool token_char(char *sequence) {
 	}
 }
 
-bool valid_seq(char * const sequence) {
-	// Check to make sure there are no invalid characters
-	char *i;
-	for(i = &sequence[0]; *i; i++) {		// sequence is terminated by null byte
-		// check for invalid?? tokens and words do not share characters (all are distinct)
+command_t validate_stream(keyword *keyword_stream, size_t *keywords_size) {			// const stuff?
+	int active_parens = 0;
+	int iter = 0;
 
-		bool in_word = false; 		// Keep track of if currently in a word
-		bool after_token = false;	// See if directly prior, have seen token
+	enum keywordtype k_type_cur = keyword_stream[iter].type;
+	enum keywordtype k_type_prev = k_type_cur;
 
-		// Spaces are ignored
-		if(i[0] == ' ')
-			continue;		// make sure you don't have to exit word here
-
-		if(sequence[i] == '\n')
-			; //idk, but note that newline can only follow ; | ( ) and simple commands
-
-		// Look at word chars?
-		else if(word_char(sequence[i])) {	// likely, you skip over words in the validating stage
-
-		if(i[0] == '\n')
-			; //idk
-
-		// Look at word chars?
-		else if(word_char(i[0])) {
-			after_token = false;
-			in_word = true;
-			continue;
+	while(keyword_stream) {
+		k_type_cur = keyword_stream[iter].type;
+		switch(k_type_cur) {
+			case OPEN_PARENS:
+				active_parens++;
+				k_type_prev = OPEN_PARENS;
+				break;
+			case CLOSE_PARENS:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "')' must follow word.\n");
+					exit(1);
+				}
+				active_parens--;
+				k_type_prev = CLOSE_PARENS;
+				if (active_parens < 0) {
+					fprintf(stderr, "No '(' to match ')'.\n");		// give line number, probably make this a better message
+					exit(1);
+				}
+				break;
+			case SEQUENCE:
+				if(iter == 0 || k_type_prev != WORD) {
+					fprintf(stderr, "Sequence must follow word.\n");		// line number, make message better
+					exit(1);
+				}
+				k_type_prev = SEQUENCE;
+				break;
+			case PIPELINE:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "Pipeline must follow word.\n");
+					exit(1);
+				}
+				k_type_prev = PIPELINE;
+				break;
+			case INPUT:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "Input must follow word.\n");
+					exit(1);
+				}
+				// Do we need to check if file exists?
+				k_type_prev = INPUT;
+				break;
+			case OUTPUT:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "Output must follow word.\n");
+					exit(1);
+				}
+				k_type_prev = OUTPUT;
+				break;
+			case WORD:
+				k_type_prev = WORD;
+				break;
 		}
-
-		else if(token_char(sequence[i])) {
-			if(!in_word && sequence[i] != '(' && *sequence != ';')
-				return false; 		// token cannot be first thing? except open paren&sequence? can we ever have a token directly following a token? certainly cannot have semicolon following semicolon
-
-		else if(token_char(i)) {
-			if(!in_word && i[0] != '(' && *sequence != ';')
-				return false; 		// token cannot be first thing? except open paren&sequence? can we ever have a token directly following a token?
-			in_word = false;
-			after_token = true;
-			continue;
-		}
+		iter++;
 	}
-
-	// Check to make sure number of parens match, and that the order is sensical
-	int open_paren = 0;
-	int close_paren = 0;
-	for(i = sequence; i[0] != '\0' || close_paren > open_paren; i++) {	// second exit condition may not be needed. check this! depends on implementation probably
-		if(i[0] == '(')
-			open_paren++;
-		if(i[0] == ')')
-			close_paren++;
-	}
-	return false;			// to appease compiler for now
 }
 
 command_stream_t
@@ -150,73 +195,103 @@ make_command_stream (int (*get_next_byte) (void *),
 	sequence_stream->commands_size = 0;
 	sequence_stream->alloc_size = 16;
 
-	/* We need to create a buffer for the input that we are reading in.*/
+	char *input_stream = read_input(get_next_byte, get_next_byte_argument);
+	char current_c = *input_stream;
+	size_t input_iterator = 0;
 
-	size_t sequence_buf_size = 512;
-	size_t sequence_processed_size = 0;
-
-	char *sequence_buf = checked_malloc(sequence_buf_size*sizeof(char));
-	bzero(sequence_buf, sequence_buf_size*sizeof(char));
-
-	char current_c;
-	size_t total_lines_processed = 0;
 	size_t current_line = 0;
-	size_t num_of_left_parens = 0;
-	size_t num_of_right_parens = 0;
+	size_t num_of_open_parens = 0;
+	size_t num_of_close_parens = 0;
 
-	bool in_comment = false;
+	keyword *keyword_stream = checked_malloc(sizeof(keyword)*64);
+	size_t keyword_iterator = 0;
 
-	while((current_c = get_next_byte(get_next_byte_argument)) != EOF) {
-		/* A newline at the beginning of a sequence should be skipped */
-		if(current_c == '\n' && sequence_processed_size == 0 && in_comment == false) {
-			total_lines_processed++;
-			continue;
-		}
 
-		else if(current_c == '\n' && num_of_left_parens > 0 && num_of_left_parens == num_of_right_parens) {
-			total_lines_processed++;
-			sequence_buf = append_char(';', sequence_buf, &sequence_processed_size, &sequence_buf_size);
-			sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
-			continue;
-		}
-
-		else if(current_c != '\n' && current_c != '#' && in_comment == false)
-		{
-			sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
-			if (current_c == '(')
-				{
-					num_of_left_parens++;
-				}
-			else if (current_c == ')')
-				{
-					num_of_right_parens++;
-				}
-			continue;
-		}
-		else if(current_c == '#')
-		{
-			//if previous character was a word or token, not a comment
-			if (word_char(*(sequence_buf+sequence_processed_size-1)) || token_char((sequence_buf+sequence_processed_size-1)))
-				sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
-			else
-				in_comment = true;
-		}
-
-		else if (current_c == '\n' || (current_c == ';' && num_of_left_parens == num_of_right_parens))
-		{
-			if (current_c == '\n')
+	while(current_c != '\0') {
+		switch(current_c) {
+		     case '\n':
+			current_line++;
+			int counter = 1;
+			while (input_stream[input_iterator+counter] == '\n') {
 				current_line++;
-
-			if (current_c == '\n' && in_comment)
-			{
-				in_comment = false;
-				sequence_buf = append_char(current_c, sequence_buf, &sequence_processed_size, &sequence_buf_size);
+		 	 	counter++;
 			}
-			else if (current_c == ';' && in_comment)
+	   		input_iterator	+= counter-1;
+			break;
+		     /*Comments cannot occur before a word or token */
+		     case '#':
+	 		if (input_iterator != 0 && ((word_char(input_stream[input_iterator-1])) || (token_char(&input_stream[input_iterator-1])))) {
+				fprintf(stderr, "A comment character (#) cannot follow a word character or token character"); //WE NEED THE LINES
+				exit(1);
 				continue;
-
+			}
+			counter = 1;
+			while ((input_stream[input_iterator+counter] != '\n') && (input_stream[input_iterator+counter] != '\0'))
+			  	counter++; //we are in a comment
+			input_iterator	+= counter;
+				continue;
+		     case ' ':
+		     case '\t':
+			input_iterator++;
+			continue;
+		     default:
+			break;
 		}
-	} 
+
+
+		size_t beginning_of_word = input_iterator;
+		if(word_char(current_c)) {
+			size_t word_len = 1;
+			while(word_char(*(input_stream+input_iterator))) {
+				word_len++;
+				input_iterator++;
+			}
+			keyword_stream[keyword_iterator].type = WORD;
+			keyword_stream[keyword_iterator].word = checked_malloc(sizeof(char)*(word_len+1));
+			bzero(keyword_stream[keyword_iterator].word, sizeof(char)*(word_len+1));
+			char* word_start = keyword_stream[keyword_iterator].word;
+			for(; word_len > 0; word_start++, beginning_of_word++) {
+				*word_start = *(input_stream+beginning_of_word);
+				word_len--;
+			} //Last character is automatically a zero byte
+			keyword_iterator++;
+			continue;
+		}
+		else if(token_char(&current_c)) {
+			keyword_stream[keyword_iterator].word = NULL;
+			switch(current_c) {
+				case ';':
+					keyword_stream[keyword_iterator].type = SEQUENCE;
+					break;
+				case '|':
+					keyword_stream[keyword_iterator].type = PIPELINE;
+					break;
+				case '(':
+					num_of_open_parens++;
+					keyword_stream[keyword_iterator].type = OPEN_PARENS;
+					break;
+				case ')':
+					num_of_close_parens++;
+					if(num_of_close_parens > num_of_open_parens){
+						fprintf(stderr, "No matching '(' for ')'");
+						exit(1); //Need to do line number
+					}
+					keyword_stream[keyword_iterator].type = CLOSE_PARENS;
+					break;
+				case '<':
+					keyword_stream[keyword_iterator].type = INPUT;
+					break;
+				case '>':
+					keyword_stream[keyword_iterator].type = OUTPUT;
+					break;
+				default:
+					break;
+			}
+			keyword_iterator++;
+			continue;
+		}
+
+	}
   	return sequence_stream;
 }
 
@@ -239,7 +314,7 @@ command_type token_to_command(char *token) {
 
 char * lowest_precedence_token(char const* sequence) {
 	// In order of precedence (high to low): (), |, ;		IS SIMPLE HIGHEST?
-	
+
 	// First, look for lowest precedence
 
 }
@@ -270,11 +345,11 @@ int status;
 
 */
 
-command_t make_command(const char * const sequence) {	// later do line number stuff, not yet pls
+/*command_t make_command(const char * const sequence) {	// later do line number stuff, not yet pls
 	command_t new_command = checked_malloc(sizeof(struct command));
 
-	/*char const *token = get_pivot_token (sequence);
-  	char const *first_string; 
+	char const *token = get_pivot_token (sequence);
+  	char const *first_string;
  	char const *second_string;
   	char *first_command;
   	char *second_command;
@@ -282,7 +357,7 @@ command_t make_command(const char * const sequence) {	// later do line number st
   	size_t second_string_size;
 
   	enum command_type token_type = token_to_command(token);
-	
+
   	if(token == NULL) // No tokens found, SIMPLE_COMMAND
    	 {
 	     	 first_string = sequence;
@@ -304,7 +379,7 @@ command_t make_command(const char * const sequence) {	// later do line number st
 	    new_command->input = NULL;
 	    new_command->output = NULL;
 
-	    /* Need to handle subshell commands 
+	    //Need to handle subshell commands
 	    switch (cmd->type)
 	      {
 		case SEQUENCE_COMMAND:
@@ -334,9 +409,9 @@ command_t make_command(const char * const sequence) {	// later do line number st
 		    break;
 		  }
 		default: break;
-	      } */
+	      }
 	  return new_command;
-}
+} */
 
 command_t
 read_command_stream (command_stream_t s)
