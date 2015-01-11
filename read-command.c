@@ -87,6 +87,8 @@ bool word_char(char c) {
 		return false;
 }
 
+// Possibly no longer necssary
+
 char* append_char(char c, char *sequence, size_t *sequence_len, size_t *sequence_size) {
 	// append character to sequence
 	sequence[(*sequence_len)] = c;
@@ -117,6 +119,69 @@ bool token_char(char *sequence) {
 	}
 }
 
+void validate_stream(keyword *keyword_stream, size_t *keywords_size) {			// const stuff?
+	int active_parens = 0;
+	int iter = 0;
+
+	enum keywordtype k_type_cur = keyword_stream[iter].type;
+	enum keywordtype k_type_prev = k_type_cur;
+
+	while(keyword_stream) {
+		k_type_cur = keyword_stream[iter].type;
+		switch(k_type_cur) {
+			case OPEN_PARENS:
+				active_parens++;
+				k_type_prev = OPEN_PARENS;
+				break;
+			case CLOSE_PARENS:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "')' must follow word.\n");
+					exit(1);
+				}
+				active_parens--;
+				k_type_prev = CLOSE_PARENS;
+				if (active_parens < 0) {
+					fprintf(stderr, "No '(' to match ')'.\n");		// give line number, probably make this a better message
+					exit(1);
+				}
+				break;
+			case SEQUENCE:
+				if(iter == 0 || k_type_prev != WORD) {
+					fprintf(stderr, "Sequence must follow word.\n");		// line number, make message better
+					exit(1);
+				}
+				k_type_prev = SEQUENCE;
+				break;
+			case PIPELINE:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "Pipeline must follow word.\n");
+					exit(1);
+				}
+				k_type_prev = PIPELINE;
+				break;
+			case INPUT:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "Input must follow word.\n");
+					exit(1);
+				}
+				// Do we need to check if file exists?
+				k_type_prev = INPUT;
+				break;
+			case OUTPUT:
+				if(k_type_prev != WORD || iter == 0) {		// check this??
+					fprintf(stderr, "Output must follow word.\n");
+					exit(1);
+				}
+				k_type_prev = OUTPUT;
+				break;
+			case WORD:
+				k_type_prev = WORD;
+				break;
+		}
+		iter++;
+	}
+}
+
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument) {
@@ -141,6 +206,7 @@ make_command_stream (int (*get_next_byte) (void *),
 	keyword *keyword_stream = checked_malloc(sizeof(struct keyword)*64);
 	size_t keyword_iterator = 0;
 	size_t keyword_alloc_size = 64;
+
 
 
 	while((current_c = *(input_stream+input_iterator)) != '\0') {
@@ -193,8 +259,8 @@ make_command_stream (int (*get_next_byte) (void *),
 			keyword_stream[keyword_iterator].type = WORD;
 			keyword_stream[keyword_iterator].word = checked_malloc(sizeof(char)*(word_len+1));
 			bzero(keyword_stream[keyword_iterator].word, sizeof(char)*(word_len+1));
-			int i=0;
-			for(i; i < word_len-1; i++) {
+			size_t i=0;
+			for(; i < word_len-1; i++) {
 				keyword_stream[keyword_iterator].word[i]=*(input_stream+beginning_of_word+i);
 			}
 			//printf("Index %d: %s\n", (int) keyword_iterator, keyword_stream[keyword_iterator].word);
@@ -243,7 +309,7 @@ make_command_stream (int (*get_next_byte) (void *),
 
 
 
-	size_t i=0;
+	/*size_t i=0;
 	for(;i<keyword_iterator;i++)
 	{
 			switch(	keyword_stream[i].type) {
@@ -269,11 +335,35 @@ make_command_stream (int (*get_next_byte) (void *),
 				printf("%s\n",keyword_stream[i].word);
 				break;
 			}
-	}
+	} */ //Test keyword_stream
   	return sequence_stream;
 }
 
-// IMPORTANT!!!!!!!! Before calling, make sure you make a copy that's safe to modify of line_number
+enum command_type token_to_command(char *token) {
+	// A simple command contains no tokens
+	if(token == NULL)
+		return SIMPLE_COMMAND;
+
+	else if(*token == '|')
+		return PIPE_COMMAND;
+
+	else if(*token == ';')
+		return SEQUENCE_COMMAND;
+
+	else if(*token == '(' || *token == ')')
+		return SUBSHELL_COMMAND;
+
+	return SIMPLE_COMMAND; 		// dummy to appease compiler
+}
+
+char * lowest_precedence_token(char const* sequence) {
+	// In order of precedence (high to low): (), |, ;		IS SIMPLE HIGHEST?
+
+	// First, look for lowest precedence
+
+}
+
+// IMPORTANT!!!!!!!! Before calling, make sure you make a copy that's safe to modify of line_number & pass that in
 
 /* FOR REFERENCE
 
