@@ -41,6 +41,24 @@ typedef struct command_stream {
 
 }command_stream;
 
+char *read_input(int (*get_next_byte) (void *), void *get_next_byte_argument) {
+	char char_c;
+	size_t sequence_alloc_size = 1024;
+	size_t buf_iterator = 0;
+	char *sequence_buf = checked_malloc(sequence_alloc_size*sizeof(char));
+	bzero(sequence_buf, sequence_alloc_size*sizeof(char));
+	while((char_c = get_next_byte(get_next_byte_argument)) != EOF) {
+		sequence_buf[buf_iterator++] = char_c;
+    		if (sequence_alloc_size == buf_iterator) {
+		  int old_alloc_size = sequence_alloc_size;
+     		  sequence_buf =  (char*) checked_grow_alloc(sequence_buf, &sequence_alloc_size);
+		  bzero(sequence_buf+old_alloc_size, old_alloc_size*sizeof(char));
+		}
+	}
+
+	return sequence_buf;
+}
+
 bool word_char(char c) {
 
 	// check if c is alphanumeric or within allowed set of special characters
@@ -147,6 +165,8 @@ make_command_stream (int (*get_next_byte) (void *),
 
 	char *sequence_buf = checked_malloc(sequence_buf_size*sizeof(char));
 	bzero(sequence_buf, sequence_buf_size*sizeof(char));
+
+	char *input_stream = read_input(get_next_byte, get_next_byte_argument);
 
 	char current_c;
 	size_t total_lines_processed = 0;
