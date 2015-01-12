@@ -57,6 +57,7 @@ enum keywordtype {
 	DO,
 	DONE,
 	WORD,
+	NEWLINE,
 };
 
 typedef struct keyword {
@@ -64,6 +65,12 @@ typedef struct keyword {
 	enum keywordtype type;
 	int line;
 }keyword;
+
+typedef struct keyword_node {
+	struct keyword* data;
+	struct keyword_node* next;
+	struct keyword_node* prev;
+} keyword_node;
 
 
 char *read_input(int (*get_next_byte) (void *), void *get_next_byte_argument) {
@@ -236,34 +243,28 @@ make_command_stream (int (*get_next_byte) (void *),
 	char current_c = *input_stream;
 	size_t input_iterator = 0;
 
-	size_t current_line = 0;
+	size_t current_line = 1;
 	size_t num_of_open_parens = 0;
 	size_t num_of_close_parens = 0;
 
-	keyword *keyword_stream = checked_malloc(sizeof(struct keyword)*64);
-	size_t keyword_iterator = 0;
-	size_t keyword_alloc_size = 64;
+	keyword_node *root = NULL;
+	keyword_node *cur = NULL;
 
+	cur = root;
 
+	enum keywordtype type;
 
 	while((current_c = *(input_stream+input_iterator)) != '\0') {
-		//("%c", current_c);
-		//TODO Need to reallocate keyword_stream
-		if (keyword_iterator == keyword_alloc_size)
-		{
-			keyword_alloc_size += 64;
-			keyword_stream = checked_realloc (keyword_stream, keyword_alloc_size*sizeof(struct keyword));
-			memset (keyword_stream + keyword_iterator, '\0', 64*sizeof(struct keyword));
-		}
 		switch(current_c) {
 		     case '\n':
+					type = NEWLINE;
 					current_line++;
 					int counter = 1;
 					while (input_stream[input_iterator+counter] == '\n') {
 						current_line++;
 		 	 			counter++;
 					}
-	   			input_iterator	+= counter-1;
+	   			input_iterator +=counter-1;
 					break;
 		     /*Comments cannot occur before a word or token */
 		     case '#':
@@ -273,7 +274,7 @@ make_command_stream (int (*get_next_byte) (void *),
 						continue;
 					}
 					counter = 1;
-					while ((input_stream[input_iterator+counter] != '\n') && (input_stream[input_iterator+counter] != '\0'))
+					while ((input_stream[input_iterator+counter] != '\0') && (input_stream[input_iterator+counter] != '\n'))
 			  		counter++; //we are in a comment
 					input_iterator	+= counter;
 					continue;
@@ -285,73 +286,75 @@ make_command_stream (int (*get_next_byte) (void *),
 					break;
 		}
 
-
 		size_t beginning_of_word = input_iterator;
+		size_t word_len = 1;
+		char* word = NULL;
 		if(word_char(current_c)) {
-			size_t word_len = 1;
-			while(word_char(*(input_stream+input_iterator))) {
+			type = WORD;
+			while (word_char(*(input_stream+input_iterator+word_len)))
 				word_len++;
-				input_iterator++;
-			}
-			keyword_stream[keyword_iterator].type = WORD;
-			keyword_stream[keyword_iterator].word = checked_malloc(sizeof(char)*(word_len+1));
-			bzero(keyword_stream[keyword_iterator].word, sizeof(char)*(word_len+1));
+			input_iterator += word_len-1;
+			word= checked_malloc(sizeof(char)*(word_len+1));
+			bzero(word, sizeof(char)*(word_len+1));
 			size_t i=0;
-			for(; i < word_len-1; i++) {
-				keyword_stream[keyword_iterator].word[i]=*(input_stream+beginning_of_word+i);
+			for(; i < word_len; i++) {
+				word[i]=*(input_stream+beginning_of_word+i);
 			}
-			char *word_temp = keyword_stream[keyword_iterator].word;
-			if (strcmp(word_temp, "if") == 0){
-					keyword_stream[keyword_iterator].type = IF;
-					keyword_stream[keyword_iterator].word = NULL;
+			if (strcmp(word, "if") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)){
+				cur->data->type = IF;
+				free(word);
+				word = NULL;
 			}
-			else if (strcmp(word_temp, "then") == 0) {
-					keyword_stream[keyword_iterator].type = THEN;
-					keyword_stream[keyword_iterator].word = NULL;
+			else if (strcmp(word, "then") == 0) {
+				cur->data->type = THEN;
+				free(word);
+				word = NULL;
 			}
-			else if (strcmp(word_temp, "else") == 0) {
-					keyword_stream[keyword_iterator].type = ELSE;
-					keyword_stream[keyword_iterator].word = NULL;
+			else if (strcmp(word, "else") == 0) {
+				cur->data->type = ELSE;
+				free(word);
+				word = NULL;
 			}
-			else if (strcmp(word_temp, "fi") == 0) {
-					keyword_stream[keyword_iterator].type = FI;
-					keyword_stream[keyword_iterator].word = NULL;
+			else if (strcmp(word, "fi") == 0) {
+				cur->data->type = FI;
+				free(word);
+				word = NULL;
 			}
-			else if (strcmp(word_temp, "while") == 0) {
-					keyword_stream[keyword_iterator].type = WHILE;
-					keyword_stream[keyword_iterator].word = NULL;
+			else if (strcmp(word, "while") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
+				cur->data->type = WHILE;
+				free(word);
+				word = NULL;
 			}
-			else if (strcmp(word_temp, "until") == 0) {
-					keyword_stream[keyword_iterator].type = UNTIL;
-					keyword_stream[keyword_iterator].word = NULL;
+			else if (strcmp(word, "until") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
+				cur->data->type = UNTIL;
+				free(word);
+				word = NULL;
 			}
-			else if (strcmp(word_temp, "do") == 0) {
-					keyword_stream[keyword_iterator].type = DO;
-					keyword_stream[keyword_iterator].word = NULL;
+			else if (strcmp(word, "do") == 0) {
+				cur->data->type = DO;
+				free(word);
+				word = NULL;
+			}
+			else if (strcmp(word, "done") == 0) {
+				cur->data->type = DONE;
+				free(word);
+				word = NULL;
+			}
 		}
-		else if (strcmp(word_temp, "done") == 0) {
-					keyword_stream[keyword_iterator].type = DONE;
-					keyword_stream[keyword_iterator].word = NULL;
-		}
-			keyword_stream[keyword_iterator].line=current_line;
-			//printf("Index %d: %s\n", (int) keyword_iterator, keyword_stream[keyword_iterator].word);
-			keyword_iterator++;
-			current_c = *(input_stream+input_iterator);
-			continue;
-		}
-		else if(token_char(&current_c)) {
-			keyword_stream[keyword_iterator].word = NULL;
-			keyword_stream[keyword_iterator].line=current_line;
+
+
+		if(token_char(&current_c)) {
+			word = NULL;
 			switch(current_c) {
 				case ';':
-					keyword_stream[keyword_iterator].type = SEQUENCE;
+					type = SEQUENCE;
 					break;
 				case '|':
-					keyword_stream[keyword_iterator].type = PIPELINE;
+					type = PIPELINE;
 					break;
 				case '(':
 					num_of_open_parens++;
-					keyword_stream[keyword_iterator].type = OPEN_PARENS;
+					type = OPEN_PARENS;
 					break;
 				case ')':
 					num_of_close_parens++;
@@ -359,80 +362,96 @@ make_command_stream (int (*get_next_byte) (void *),
 						fprintf(stderr, "No matching '(' for ')'");
 						exit(1); //Need to do line number
 					}
-					keyword_stream[keyword_iterator].type = CLOSE_PARENS;
+					type = CLOSE_PARENS;
 					break;
 				case '<':
-					keyword_stream[keyword_iterator].type = INPUT;
+					type = INPUT;
 					break;
 				case '>':
-					keyword_stream[keyword_iterator].type = OUTPUT;
+					type = OUTPUT;
 					break;
 				default:
 					break;
 			}
-		//	printf("Index %d: %d\n", (int) keyword_iterator, (int) keyword_stream[keyword_iterator].type);
-			keyword_iterator++;
-			input_iterator++;
-			continue;
 		}
-	input_iterator++; //Check later
+
+
+		keyword_node* temp = (keyword_node*) checked_malloc(sizeof(keyword_node));
+		temp->data = checked_malloc(sizeof(keyword));
+		temp->next = NULL;
+		temp->prev = NULL;
+		temp->data->type = type;
+		temp->data->line = current_line;
+		temp->data->word = word;
+
+		if (cur == NULL) {
+			root = temp;
+			cur = root;
+		} else {
+			cur -> next = temp;
+			temp -> prev = cur;
+			cur = cur-> next;
+		}
+
+		input_iterator++; //Check later
 	} //END-WHILE
 
-
-
-
-/*	size_t i=0;
-	for(;i<keyword_iterator;i++)
-	{
-			switch(	keyword_stream[i].type) {
+/*	cur = root;
+	int i = 0;
+	while(cur->next != NULL) {
+		if(cur->data->word)
+			printf("Keyword %d: %s\n", (int) i, cur->data->word);
+		else
+			switch(cur->data->type) {
 				case SEQUENCE:
-			 	printf("SEQUENCE\n");
-				break;
+					printf("Keyword %d: SEQUENCE\n", i);
+					break;
 				case PIPELINE:
-				printf("PIPELINE\n");
-				break;
+					printf("Keyword %d: PIPELINE\n", i);
+					break;
 				case OPEN_PARENS:
-				printf("OPEN_PARENS\n");
-				break;
+					printf("Keyword %d: OPEN_PARENS\n", i);
+					break;
 				case CLOSE_PARENS:
-				printf("CLOSE_PARENS\n");
-				break;
+					printf("Keyword %d: CLOSE_PARENS\n", i);
+					break;
 				case INPUT:
-				printf("INPUT\n");
-				break;
+					printf("Keyword %d: INPUT\n", i);
+					break;
 				case OUTPUT:
-				printf("OUTPUT\n");
-				break;
-				case WORD:
-				printf("%s\n",keyword_stream[i].word);
-				break;
+					printf("Keyword %d: OUTPUT\n", i);
+					break;
 				case IF:
-				printf("IF\n");
-				break;
+					printf("IF\n");
+					break;
 				case ELSE:
-				printf("ELSE\n");
-				break;
+					printf("ELSE\n");
+					break;
 				case THEN:
-				printf("THEN\n");
-				break;
+					printf("THEN\n");
+					break;
 				case FI:
-				printf("FI\n");
-				break;
+					printf("FI\n");
+					break;
 				case WHILE:
-				printf("WHILE\n");
-				break;
+					printf("WHILE\n");
+					break;
 				case UNTIL:
-				printf("UNTIL\n");
-				break;
+					printf("UNTIL\n");
+					break;
 				case DO:
-				printf("DO\n");
-				break;
+					printf("DO\n");
+					break;
 				case DONE:
-				printf("DONE\n");
-				break;
-
+					printf("DONE\n");
+					break;
+				case NEWLINE:
+					printf("NEWLINE\n");
+					break;
 			}
-	} */ //Test keyword_stream
+		cur = cur->next;
+		i++;
+	} */
   	return sequence_stream;
 }
 
