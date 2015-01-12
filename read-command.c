@@ -48,12 +48,21 @@ enum keywordtype {
 	CLOSE_PARENS,
 	INPUT,
 	OUTPUT,
+	IF,
+	THEN,
+	ELSE,
+	FI,
+	WHILE,
+	UNTIL,
+	DO,
+	DONE,
 	WORD,
 };
 
 typedef struct keyword {
 	char* word;
 	enum keywordtype type;
+	int line;
 }keyword;
 
 
@@ -177,9 +186,37 @@ void validate_stream(keyword *keyword_stream, size_t *keywords_size) {			// cons
 			case WORD:
 				k_type_prev = WORD;
 				break;
+			default:
+				break;
 		}
 		iter++;
 	}
+}
+
+command_t
+new_command () {
+	command_t cmd = (command_t) checked_malloc(sizeof(struct command));
+	cmd->type = SIMPLE_COMMAND; //default
+	cmd->input = NULL;
+	cmd->output = NULL;
+	cmd->u.command[0] = NULL;
+	cmd->u.command[1] = NULL;
+	cmd->u.command[2] = NULL;
+	cmd->u.word = NULL;
+	return cmd;
+}
+
+command_stream_t keyword_2_command (keyword* keyword_stream, size_t keyword_stream_size) {
+
+	keyword current_keyword;
+	keyword next_keyword;
+
+	size_t i= 0;
+	for(; i< keyword_stream_size; i++) {
+		current_keyword=keyword_stream[i];
+		next_keyword=keyword_stream[i+1];
+	}
+
 }
 
 command_stream_t
@@ -210,7 +247,7 @@ make_command_stream (int (*get_next_byte) (void *),
 
 
 	while((current_c = *(input_stream+input_iterator)) != '\0') {
-		//printf("%c", current_c);
+		//("%c", current_c);
 		//TODO Need to reallocate keyword_stream
 		if (keyword_iterator == keyword_alloc_size)
 		{
@@ -263,6 +300,40 @@ make_command_stream (int (*get_next_byte) (void *),
 			for(; i < word_len-1; i++) {
 				keyword_stream[keyword_iterator].word[i]=*(input_stream+beginning_of_word+i);
 			}
+			char *word_temp = keyword_stream[keyword_iterator].word;
+			if (strcmp(word_temp, "if") == 0){
+					keyword_stream[keyword_iterator].type = IF;
+					keyword_stream[keyword_iterator].word = NULL;
+			}
+			else if (strcmp(word_temp, "then") == 0) {
+					keyword_stream[keyword_iterator].type = THEN;
+					keyword_stream[keyword_iterator].word = NULL;
+			}
+			else if (strcmp(word_temp, "else") == 0) {
+					keyword_stream[keyword_iterator].type = ELSE;
+					keyword_stream[keyword_iterator].word = NULL;
+			}
+			else if (strcmp(word_temp, "fi") == 0) {
+					keyword_stream[keyword_iterator].type = FI;
+					keyword_stream[keyword_iterator].word = NULL;
+			}
+			else if (strcmp(word_temp, "while") == 0) {
+					keyword_stream[keyword_iterator].type = WHILE;
+					keyword_stream[keyword_iterator].word = NULL;
+			}
+			else if (strcmp(word_temp, "until") == 0) {
+					keyword_stream[keyword_iterator].type = UNTIL;
+					keyword_stream[keyword_iterator].word = NULL;
+			}
+			else if (strcmp(word_temp, "do") == 0) {
+					keyword_stream[keyword_iterator].type = DO;
+					keyword_stream[keyword_iterator].word = NULL;
+		}
+		else if (strcmp(word_temp, "done") == 0) {
+					keyword_stream[keyword_iterator].type = DONE;
+					keyword_stream[keyword_iterator].word = NULL;
+		}
+			keyword_stream[keyword_iterator].line=current_line;
 			//printf("Index %d: %s\n", (int) keyword_iterator, keyword_stream[keyword_iterator].word);
 			keyword_iterator++;
 			current_c = *(input_stream+input_iterator);
@@ -270,6 +341,7 @@ make_command_stream (int (*get_next_byte) (void *),
 		}
 		else if(token_char(&current_c)) {
 			keyword_stream[keyword_iterator].word = NULL;
+			keyword_stream[keyword_iterator].line=current_line;
 			switch(current_c) {
 				case ';':
 					keyword_stream[keyword_iterator].type = SEQUENCE;
@@ -309,7 +381,7 @@ make_command_stream (int (*get_next_byte) (void *),
 
 
 
-	/*size_t i=0;
+/*	size_t i=0;
 	for(;i<keyword_iterator;i++)
 	{
 			switch(	keyword_stream[i].type) {
@@ -334,6 +406,31 @@ make_command_stream (int (*get_next_byte) (void *),
 				case WORD:
 				printf("%s\n",keyword_stream[i].word);
 				break;
+				case IF:
+				printf("IF\n");
+				break;
+				case ELSE:
+				printf("ELSE\n");
+				break;
+				case THEN:
+				printf("THEN\n");
+				break;
+				case FI:
+				printf("FI\n");
+				break;
+				case WHILE:
+				printf("WHILE\n");
+				break;
+				case UNTIL:
+				printf("UNTIL\n");
+				break;
+				case DO:
+				printf("DO\n");
+				break;
+				case DONE:
+				printf("DONE\n");
+				break;
+
 			}
 	} */ //Test keyword_stream
   	return sequence_stream;
@@ -355,107 +452,6 @@ enum command_type token_to_command(char *token) {
 
 	return SIMPLE_COMMAND; 		// dummy to appease compiler
 }
-
-char * lowest_precedence_token(char const* sequence) {
-	// In order of precedence (high to low): (), |, ;		IS SIMPLE HIGHEST?
-
-	// First, look for lowest precedence
-
-}
-
-// IMPORTANT!!!!!!!! Before calling, make sure you make a copy that's safe to modify of line_number & pass that in
-
-/* FOR REFERENCE
-
-struct command {
-	enum command_type type;
-
-// Exit status, or -1 if not known (e.g., because it has not exited yet).
-int status;
-
-// I/O redirections, or null if none.
-	char *input;
-	char *output;
-
-	union {
-// For SIMPLE_COMMAND.
-	char **word;
-
-// For all other kinds of commands.  Trailing entries are unused.
-// Only IF_COMMAND uses all three entries.
-	struct command *command[3];
-	} u;
-};
-
-*/
-
-/*command_t make_command(const char * const sequence) {	// later do line number stuff, not yet pls
-	command_t new_command = checked_malloc(sizeof(struct command));
-
-	char const *token = get_pivot_token (sequence);
-  	char const *first_string;
- 	char const *second_string;
-  	char *first_command;
-  	char *second_command;
-  	size_t first_string_size;
-  	size_t second_string_size;
-
-  	enum command_type token_type = token_to_command(token);
-
-  	if(token == NULL) // No tokens found, SIMPLE_COMMAND
-   	 {
-	     	 first_string = sequence;
-	      	 first_string_size = strlen(first_string) + 1;
-	      	 second_string = NULL;
-	      	 second_string_size = 0;
-    	 }
-  	else
-   	 {
-	      first_string = sequence;
-	      first_string_size = (token - first_string) + 1; // Leave space for the null byte
-
-	      second_string = token + 1;
-	      second_string_size = strlen(second_string) + 1;
-	 }
-
-	    new_command->type = token_type;
-	    new_command->status = -1;
-	    new_command->input = NULL;
-	    new_command->output = NULL;
-
-	    //Need to handle subshell commands
-	    switch (cmd->type)
-	      {
-		case SEQUENCE_COMMAND:
-		case OR_COMMAND:
-		case AND_COMMAND:
-		case PIPE_COMMAND:
-		  {
-		    1st_command = checked_malloc (sizeof (char) * 1st_string);
-		    memcpy (1st_command, 1st_string, 1st_string_size);
-		    1st_command[1st_string_size-1] = '\0';
-
-		    2nd_command = checked_malloc (sizeof (char) * 2nd_string_size);
-		    strcpy (2nd_command, 2nd_string);
-
-		    new_command->u.command[0] = make_command (1st_command);
-		    new_command->u.command[1] = make_command (2nd_command);
-
-		    free (1st_command);
-		    free (2nd_command);
-		    break;
-		  }
-		case SIMPLE_COMMAND:
-		  {
-		    char *stripped_expr = handle_and_strip_file_redirects (sequence, new_command, false);
-		    split_expression_by_token (new_command, stripped_expr, ' ', p_line_number);
-		    free(stripped_expr);
-		    break;
-		  }
-		default: break;
-	      }
-	  return new_command;
-} */
 
 command_t
 read_command_stream (command_stream_t s)
