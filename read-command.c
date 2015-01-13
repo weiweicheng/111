@@ -38,7 +38,7 @@ typedef struct command_stream {
 	int iter;
 	char **iplist;
 	char **oplist;
-	struct command_t m_command;
+	command_t command;
 	struct command_stream* next;
 
 
@@ -354,7 +354,7 @@ keyword_node* node_pop () {
 	return node_top;
 }
 
-command_stream_t command_stream_append (command_stream_t cmd_stream, command_stream_t cmd) {
+command_stream_t cmd_stream_append (command_stream_t cmd_stream, command_stream_t cmd) {
 	//printf("cappend\n");
 	if (!cmd)
 		return cmd_stream;
@@ -365,27 +365,27 @@ command_stream_t command_stream_append (command_stream_t cmd_stream, command_str
 		}
 		else {
 			command_stream_t cmd_stream_loop = cmd_stream;
-			int counter = 1;
+			size_t counter = 1;
 			while (cmd_stream_loop->next) {
 				cmd_stream_loop->size = counter++;
-				cmd_stream_loop = cmd_stream_loop->size;
+				cmd_stream_loop = cmd_stream_loop->next;
 			}
-			cmd_stream_loop->number = counter++;
+			cmd_stream_loop->size = counter++;
 			cmd_stream_loop->next = cmd;
 			cmd->size = counter;
 			cmd->next = NULL;
 		}
-		return cstream;
+		return cmd_stream;
 	}
 
 command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	struct keyword_node* current_keyword, next_keyword;
 	command_t ct_temp1, ct_temp2, cmd1, cmd2;
-	command_stream_t cmd_stack_temp, cmd_stream;
+	command_stream_t cmd_stream_temp, cmd_stream;
 
 	current_keyword = keyword_stream;
 	ct_temp1 = ct_temp2 = cmd1 = cmd2 = NULL;
-	cmd_stack_temp = cmd_stream = NULL;
+	cmd_stream_temp = cmd_stream = NULL;
 
 	char **simple_command_a = NULL;
 	int paren_open = 0;
@@ -427,7 +427,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				}
 				ct_temp2 = new_command();
 				ct_temp2->type = SUBSHELL_COMMAND;
-				ct_temp2->u.subshell_command = cmd_pop(&top);
+				ct_temp2->u.command[0] = cmd_pop(&top);
 				cmd_push (ct_temp2, &top, &ctstacksize);
 				ct_temp1 = ct_temp2 = NULL;
 				simple_command_a = NULL;
@@ -498,13 +498,13 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				while (stackPrec(node_type_peek()) > streamPrec(current_keyword->data->type)) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
-					ct_temp = cmd_merge(cmd1, cmd2, node_pop());
+					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
 					cmd_push (ct_temp1, &top, &ctstacksize);
 				}
 				if (!paren_open) {
 					cmd_stream_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
 					cmd_stream_temp->command = cmd_pop(&top);
-					cmd_stream = cmd_stream_append(cmd_stream, cs_temp1);
+					cmd_stream = cmd_stream_append(cmd_stream, cmd_stream_temp);
 				}
 				ct_temp1 = NULL;
 				simple_command_a = NULL;
@@ -517,18 +517,18 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			cmd2 = cmd_pop(&top);
 			cmd1 = cmd_pop(&top);
 			ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
-			cmd_push (ct_temp`, &top, &ctstacksize);
+			cmd_push (ct_temp1, &top, &ctstacksize);
 		}
-		cs_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
-		cs_temp->m_command = cmd_cpop(&top);
+		cmd_stream_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
+		cmd_stream_temp->command = cmd_pop(&top);
 
-		cstream = cmd_stream_append(cstream, cs_temp);
+		cmd_stream = cmd_stream_append(cmd_stream, cmd_stream_temp);
 		ct_temp1 = NULL;
 		if (cmd_pop(&top)) {
 			fprintf(stderr,"Syntax error\n");
 			exit(1);
 		}
-		return cstream;
+		return cmd_stream;
 
 	}
 }
@@ -540,11 +540,6 @@ make_command_stream (int (*get_next_byte) (void *),
 	/* A sequence will be defined as one line of code, from beginning to end statement */
 
 	/* Initialize the command_stream with 16 possible commands */
-	command_stream_t sequence_stream = checked_malloc(sizeof(struct command_stream));
-	sequence_stream->commands = checked_malloc(16*sizeof(command_t));
-	sequence_stream->iter = 0;
-	sequence_stream->commands_size = 0;
-	sequence_stream->alloc_size = 16;
 
 	char *input_stream = read_input(get_next_byte, get_next_byte_argument);
 	char current_c = *input_stream;
@@ -759,6 +754,10 @@ make_command_stream (int (*get_next_byte) (void *),
 		cur = cur->next;
 		i++;
 	} */
+
+		//VALIDATE
+		command_stream_t sequence_stream = token_2_command_stream(root);
+
   	return sequence_stream;
 }
 
@@ -783,14 +782,12 @@ command_t
 read_command_stream (command_stream_t s)
 {
 
-  /* Reading a command returns only one command. If command is returned,
-     we must increment the iterator to point to the next command. */
-
-  //If the iterator reaches the end of the array of commands, return NULL
-  if(s->iter == s->commands_size) {
-	s->iter = 0;
+	if (s->iter == 0){
+		s->iter = 1;
+		return s->command;
+	}
+	else if (s->next != NULL){
+		return read_command_stream(s->next);
+	}
 	return NULL;
-  }
-  else
-	return s->commands[s->iter++];
 }
