@@ -45,23 +45,23 @@ typedef struct command_stream {
 }command_stream;
 
 enum keywordtype {
-	SEQUENCE,
-	PIPELINE,
-	OPEN_PARENS,
-	CLOSE_PARENS,
-	INPUT,
-	OUTPUT,
-	IF,
-	THEN,
-	ELSE,
-	FI,
-	WHILE,
-	UNTIL,
-	DO,
-	DONE,
-	WORD,
-	NEWLINE,
-	ERROR,
+	SEQUENCE,	//0
+	PIPELINE,	//1
+	OPEN_PARENS,	//2
+	CLOSE_PARENS,	//3
+	INPUT,		//4
+	OUTPUT,		//5
+	IF,		//6
+	THEN,		//7
+	ELSE,		//8
+	FI,		//9
+	WHILE,		//10
+	UNTIL,		//11
+	DO,			//12
+	DONE,		//13
+	WORD,		//14
+	NEWLINE,	//15
+	ERROR,		//16
 };
 
 typedef struct keyword {
@@ -132,9 +132,9 @@ void validate_stream(keyword_node *root) {			// const stuff?
 	enum keywordtype k_type_prev;
 	keyword_node *current = root;
 	int in_if = 0;
-	int in_while = 0;
-	int in_until = 0;
-
+	int in_while_until = 0;
+	int need_then = 0;		// incremented after seeing if, decremented after seeing then
+	int need_do = 0;		// incremented after seeing while/until, decremented after seeing do
 
 	while(current) {
 		k_type_cur = current->data->type;
@@ -178,15 +178,31 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				k_type_prev = INPUT;
 				break;
 			case OUTPUT:
-				if(k_type_prev != WORD || iter == 0) {		// check this??
-					fprintf(stderr, "Output must follow word.\n");
+				if((k_type_prev != WORD && k_type_prev != DONE && k_type_prev != FI) || iter == 0) {		// check this??
+					fprintf(stderr, "Line %d: Output must follow word.\n", current->data->line);
 					exit(1);
 				}
 				k_type_prev = OUTPUT;
 				break;
 			case IF:
+				//	if(k_type_prev != ???)
 				k_type_prev = IF;
 				in_if++;
+				//printf("Number of ifs: %d\n", in_if);
+				need_then++;
+				break;
+			case THEN:
+				if (in_if <= 0) {
+					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					exit(1);
+				}
+				if (need_then < 1) {
+					fprintf(stderr, "Line %d: Unneccesary 'then' token", current->data->line);
+					exit(1);
+				}
+				//printf("Number of thens: %d\n", need_then);
+				need_then--;
+				k_type_prev = THEN;
 				break;
 			case ELSE:
 				if (in_if==0) {
@@ -205,22 +221,34 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				break;
 			case WHILE:
 				k_type_prev = WHILE;
-				in_while++;
+				in_while_until++;
+				need_do++;
 				break;
 			case UNTIL:
 				k_type_prev = UNTIL;
-				in_until++;
+				in_while_until++;
+				need_do++;
 				break;
 			case DO:
-				if(in_while==0 && in_until==0){
+				if(in_while_until <= 0){	// think about this: is this necessary?
 					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
 					exit(1);
 				}
+				if(need_do < 1) {
+					fprintf(stderr, "Line %d: Unneccessary 'do' token.", current->data->line);
+					exit(1);
+				}
+				need_do--;
 				k_type_prev = DO;
 				break;
 			case DONE:
-				//NEED TO CHECK IF MOST RECENT IS WHILE OR UNTIL
-				k_type_prev=DO;
+				if (in_while_until < 1) {
+					fprintf(stderr, "Line %d: Not in a loop", current->data->line);
+					exit(1);
+				}
+				in_while_until--;
+				k_type_prev=DONE;
+				break;
 			case WORD:
 				k_type_prev = WORD;
 				break;
@@ -624,7 +652,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			case WORD:
 				if (!ct_temp1) {
 					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));		// fix
 					ct_temp1->u.word = simple_command_a;
 				}
 				*simple_command_a = current_keyword->data->word;
@@ -722,10 +750,9 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			fprintf(stderr,"Syntax error\n");
 			exit(1);
 		}
-
 		return cmd_stream;
-
 }
+
 
 
 
@@ -791,54 +818,54 @@ make_command_stream (int (*get_next_byte) (void *),
 			type = WORD;
 			while (word_char(*(input_stream+input_iterator+word_len)))
 				word_len++;
-			input_iterator += word_len-1;
-			word= checked_malloc(sizeof(char)*(word_len+1));
-			bzero(word, sizeof(char)*(word_len+1));
-			size_t i=0;
-			for(; i < word_len; i++) {
-				word[i]=*(input_stream+beginning_of_word+i);
+				input_iterator += word_len-1;
+				word= checked_malloc(sizeof(char)*(word_len+1));
+				bzero(word, sizeof(char)*(word_len+1));
+				size_t i=0;
+				for(; i < word_len; i++) {
+					word[i]=*(input_stream+beginning_of_word+i);
+				}
+				if (strcmp(word, "if") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)){
+					type = IF;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "then") == 0) {
+					type = THEN;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "else") == 0) {
+					type = ELSE;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "fi") == 0) {
+					type = FI;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "while") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)) {
+					type = WHILE;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "until") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)) {
+					type = UNTIL;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "do") == 0) {
+					type = DO;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "done") == 0) {
+					type = DONE;
+					free(word);
+					word = NULL;
+				}
 			}
-			if (strcmp(word, "if") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)){
-				type = IF;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "then") == 0) {
-				type = THEN;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "else") == 0) {
-				type = ELSE;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "fi") == 0) {
-				type = FI;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "while") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
-				type = WHILE;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "until") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
-				type = UNTIL;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "do") == 0) {
-				type = DO;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "done") == 0) {
-				type = DONE;
-				free(word);
-				word = NULL;
-			}
-		}
 
 
 		if(token_char(&current_c)) {
@@ -922,7 +949,6 @@ enum command_type token_to_command(char *token) {
 command_t
 read_command_stream (command_stream_t s)
 {
-
 	if (s->iter == 0){
 		s->iter = 1;
 		return s->command;
