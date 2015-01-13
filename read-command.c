@@ -34,10 +34,13 @@
    complete the incomplete type declaration in command.h.  */
 
 typedef struct command_stream {
-	command_t *commands;
+	size_t size;
 	int iter;
-	int commands_size;
-	int alloc_size;
+	char **iplist;
+	char **oplist;
+	struct command_t m_command;
+	struct command_stream* next;
+
 
 }command_stream;
 
@@ -341,6 +344,29 @@ keyword_node* node_pop () {
 	return node_top;
 }
 
+command_stream_t command_stream_append (command_stream_t cmd_stream, command_stream_t cmd) {
+	//printf("cappend\n");
+	if (!cmd)
+		return cmd_stream;
+		if (!cmd_stream) { //empty
+			cmd_stream = cmd;
+			cmd->next = NULL;
+			cmd->size = 1;
+		}
+		else {
+			command_stream_t cmd_stream_loop = cmd_stream;
+			int counter = 1;
+			while (cmd_stream_loop->next) {
+				cmd_stream_loop->size = counter++;
+				cmd_stream_loop = cmd_stream_loop->size;
+			}
+			cmd_stream_loop->number = counter++;
+			cmd_stream_loop->next = cmd;
+			cmd->size = counter;
+			cmd->next = NULL;
+		}
+		return cstream;
+	}
 
 command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	struct keyword_node* current_keyword, next_keyword;
@@ -457,10 +483,42 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				simple_command_a = NULL;
 				node_push(current_keyword);
 				break;
+			case NEWLINE:
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				while (stackPrec(node_type_peek()) > streamPrec(current_keyword->data->type)) {
+					cmd2 = cmd_pop(&top);
+					cmd1 = cmd_pop(&top);
+					ct_temp = cmd_merge(cmd1, cmd2, node_pop());
+					cmd_push (ct_temp1, &top, &ctstacksize);
+				}
+				if (!paren_open) {
+					cmd_stream_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
+					cmd_stream_temp->command = cmd_pop(&top);
+					cmd_stream = cmd_stream_append(cmd_stream, cs_temp1);
+				}
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				break;
 			default:
 				break;
-
 		}
+		cmd_push (ct_temp1, &top, &ctstacksize);
+		while (node_type_peek() != ERROR) {
+			cmd2 = cmd_pop(&top);
+			cmd1 = cmd_pop(&top);
+			ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
+			cmd_push (ct_temp`, &top, &ctstacksize);
+		}
+		cs_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
+		cs_temp->m_command = cmd_cpop(&top);
+
+		cstream = cmd_stream_append(cstream, cs_temp);
+		ct_temp1 = NULL;
+		if (cmd_pop(&top)) {
+			fprintf(stderr,"Syntax error\n");
+			exit(1);
+		}
+		return cstream;
 
 	}
 }
