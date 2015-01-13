@@ -72,6 +72,8 @@ typedef struct keyword_node {
 	struct keyword_node* prev;
 } keyword_node;
 
+keyword_node *key_stack = NULL;
+command_t *cmd_stack = NULL;
 
 char *read_input(int (*get_next_byte) (void *), void *get_next_byte_argument) {
 	char char_c;
@@ -103,23 +105,6 @@ bool word_char(char c) {
 		return false;
 }
 
-// Possibly no longer necssary
-
-char* append_char(char c, char *sequence, size_t *sequence_len, size_t *sequence_size) {
-	// append character to sequence
-	sequence[(*sequence_len)] = c;
-	(*sequence_len)++;
-
-	// check if we have filled allocated size, if so allocate more space
-	if((*sequence_len) == (*sequence_size)) {
-		(*sequence_size) += 512;
-		checked_realloc(sequence, 512);
-		bzero(sequence+(*sequence_len), 512);
-	}
-
-	return sequence;
-}
-
 bool token_char(char *sequence) {
 	// token can only be one of 6 characters
 	switch(*sequence) {
@@ -135,15 +120,20 @@ bool token_char(char *sequence) {
 	}
 }
 
-void validate_stream(keyword *keyword_stream, size_t *keywords_size) {			// const stuff?
+void validate_stream(keyword_node *root) {			// const stuff?
 	int active_parens = 0;
 	int iter = 0;
 
-	enum keywordtype k_type_cur = keyword_stream[iter].type;
-	enum keywordtype k_type_prev = k_type_cur;
+	enum keywordtype k_type_cur;
+	enum keywordtype k_type_prev;
+	keyword_node *current = root;
+	int in_if = 0;
+	int in_while = 0;
+	int in_until = 0;
 
-	while(keyword_stream) {
-		k_type_cur = keyword_stream[iter].type;
+
+	while(current) {
+		k_type_cur = current->data->type;
 		switch(k_type_cur) {
 			case OPEN_PARENS:
 				active_parens++;
@@ -190,12 +180,50 @@ void validate_stream(keyword *keyword_stream, size_t *keywords_size) {			// cons
 				}
 				k_type_prev = OUTPUT;
 				break;
+			case IF:
+				k_type_prev = IF;
+				in_if++;
+				break;
+			case ELSE:
+				if (in_if==0) {
+					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					exit(1);
+				}
+				k_type_prev = ELSE;
+				break;
+			case FI:
+				if(in_if==0){
+					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					exit(1);
+				}
+				k_type_prev = FI;
+				in_if--;
+				break;
+			case WHILE:
+				k_type_prev = WHILE;
+				in_while++;
+				break;
+			case UNTIL:
+				k_type_prev = UNTIL;
+				in_until++;
+				break;
+			case DO:
+				if(in_while==0 && in_until==0){
+					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					exit(1);
+				}
+				k_type_prev = DO;
+				break;
+			case DONE:
+				//NEED TO CHECK IF MOST RECENT IS WHILE OR UNTIL
+				k_type_prev=DO;
 			case WORD:
 				k_type_prev = WORD;
 				break;
 			default:
 				break;
 		}
+		current = current->next;
 		iter++;
 	}
 }
@@ -213,17 +241,168 @@ new_command () {
 	return cmd;
 }
 
-command_stream_t keyword_2_command (keyword* keyword_stream, size_t keyword_stream_size) {
+void cmd_push(command_t cmd, int *top, size_t* cmd_stack_size) {
+	if (cmd == NULL)
+		return;
+	if (*cmd_stack_size == ((*top+1)*sizeof(command_t)))
+			cmd_stack = (command_t*) checked_grow_alloc(cmd_stack, cmd_stack_size);
+	cmd_stack[++*top] = cmd;
+}
 
-	keyword current_keyword;
-	keyword next_keyword;
+command_t cmd_pop (int *top) {
+	command_t cmd = NULL;
+	if (*top >= 0) { //not empty
+		cmd = cmd_stack[*top];
+		if (*top)
+			--*top;
+		else
+				*top = -1;
+		}
+	return cmd;
+}
 
-	size_t i= 0;
-	for(; i< keyword_stream_size; i++) {
-		current_keyword=keyword_stream[i];
-		next_keyword=keyword_stream[i+1];
+command_t cmd_merge (command_t cmd1, command_t cmd2, keyword_node* keyword) {
+	if (!keyword) {
+		fprintf(stderr, "Syntax error - command type unidentified\n");
+		exit(1);
+	}
+	command_t cmd = NULL;
+	if (!(cmd1 && cmd2)) {
+		char *ctype = NULL;
+		if (keyword->data->type == SEQUENCE)
+			ctype = ";";
+		if (keyword->data->type == PIPELINE)
+			ctype = "|";
+		if (keyword->data->type == IF)
+			ctype = "i";
+		if (keyword->data->type == WHILE)
+			ctype = "w";
+		if (keyword->data->type == UNTIL)
+			ctype = "u";
+		else
+			fprintf(stderr, "Syntax error - command type incorrect\n");
+
+		if (cmd1)
+			fprintf(stderr, "Syntax error - RHS of %s command missing\n",ctype);
+		else
+			fprintf(stderr, "Syntax error - LHS of %s command missing\n",ctype);
+			exit(1);
+		}
+
+		cmd = new_command();
+		cmd->u.command[0] = cmd1;
+		cmd->u.command[1] = cmd2;
+
+		if (keyword->data->type == SEQUENCE)
+			cmd->type = SEQUENCE_COMMAND;
+		if (keyword->data->type == PIPELINE)
+			cmd->type = PIPE_COMMAND;
+		if (keyword->data->type == IF) //Needs to consider else
+			cmd->type = IF_COMMAND;
+		if (keyword->data->type == WHILE)
+			cmd->type = WHILE_COMMAND;
+		if (keyword->data->type == UNTIL)
+			cmd->type = UNTIL_COMMAND;
+		return cmd;
+}
+
+void node_push (keyword_node* keyword) {
+	//printf("tspushed %d\n", item->m_token.type);
+	if (keyword == NULL)
+		return;
+	if (key_stack == NULL) { //
+			key_stack = keyword;
+			key_stack->prev = key_stack->next = NULL;
+		}
+	else {
+			keyword->next = key_stack;
+			keyword->prev = NULL;
+			key_stack->prev = keyword;
+			key_stack = keyword;
+		}
 	}
 
+enum keywordtype node_type_peek() {
+		if (key_stack)
+			return key_stack->data->type;
+		else
+			return -1;
+}
+
+keyword_node* node_pop () {
+	keyword_node* node_top = NULL;
+	if (key_stack) {
+		node_top = key_stack;
+		key_stack = key_stack->next;
+		node_top->next = node_top->prev = NULL;
+		if(key_stack)
+			key_stack->prev = NULL;
+		}
+	return node_top;
+}
+
+
+command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
+	keyword_node* current_keyword, next_keyword;
+	command_t ct_temp1, ct_temp2, cmd1, cmd2;
+	command_stream_t cmd_stack_temp, cmd_stream;
+
+	current_keyword = keyword_stream;
+	ct_temp1 = ct_temp2 = cmd1 = cmd2 = NULL;
+	cmd_stack_temp = cmd_stream = NULL;
+
+	char **simple_command_a = NULL;
+	int paren_open = 0;
+	int if_open = 0;
+	int while_open = 0;
+	int until_open =0;
+
+	int top = -1;
+	size_t ctstacksize = 16*sizeof(command_t);
+	cmd_stack = (command_t*) checked_malloc(ctstacksize);
+
+	while(current_keyword) {
+		next_keyword = &current_keyword->next;
+		switch(current_keyword->data->type) {
+			case OPEN_PARENS:
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				paren_open++;
+				node_push(current_keyword);
+				break;
+			case CLOSE_PARENS:
+				if (!paren_open) {
+					fprintf(stderr, "No matching '(' for ')'\n");
+					exit(1);
+				}
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				paren_open--;
+				while (node_type_peek() != OPEN_PARENS) {
+					if (node_type_peek() == -1) {
+						fprintf(stderr, "Shell command syntax error, unmatched ')'\n");
+						exit(1);
+					}
+					cmd2 = cmd_pop(&top);
+					cmd1 = cmd_pop(&top);
+					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
+					cmd_push (ct_temp1, &top, &ctstacksize);
+					ct_temp1 = NULL;
+				}
+				ct_temp2 = new_command();
+				ct_temp2->type = SUBSHELL_COMMAND;
+				ct_temp2->u.subshell_command = cmd_pop(&top);
+				cmd_push (ct_temp2, &top, &ctstacksize);
+				ct_temp1 = ct_temp2 = NULL;
+				simple_command_a = NULL;
+				node_pop();
+				break;
+			default:
+				break;
+
+		}
+
+	}
 }
 
 command_stream_t
