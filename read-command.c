@@ -416,6 +416,7 @@ int stack_precedence(enum keywordtype keyword) {
 		case IF:
 		case UNTIL:
 		case WHILE:
+		case DO:
 			return 0;
 		default:
 			return -1;
@@ -436,6 +437,7 @@ int node_precedence(enum keywordtype keyword) {
 		case IF:
 		case UNTIL:
 		case WHILE:
+		case DO:
 			return 7;
 		default:
 			return -1;
@@ -500,7 +502,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	size_t ctstacksize = 16*sizeof(command_t);
 	cmd_stack = (command_t*) checked_malloc(ctstacksize);
 
-	int i;
+	int i = 0;
 	while(current_keyword) {
 
 		printf("Iteration %d: working on current keyword %d\n", i++, current_keyword->data->type);
@@ -538,40 +540,53 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				*++simple_command_a = NULL;
 				break;
 			case WHILE:
-				if (!ct_temp1) {
-					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
-					ct_temp1->u.word = simple_command_a;
-				}
-				*simple_command_a = "while";
-				*++simple_command_a = NULL;
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				while_open++;
+				node_push(current_keyword);
 				break;
 			case DO:
-				if (!ct_temp1) {
-					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
-					ct_temp1->u.word = simple_command_a;
-				}
-				*simple_command_a = "do";
-				*++simple_command_a = NULL;
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				if((node_type_peek()==NEWLINE)||(node_type_peek()==SEQUENCE))
+					node_pop();
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				node_push(current_keyword);
 				break;
 			case DONE:
-				if (!ct_temp1) {
-					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
-					ct_temp1->u.word = simple_command_a;
+				if (!while_open && !until_open) {
+				fprintf(stderr, "No initator for loop'\n");
+				exit(1);
 				}
-				*simple_command_a = "done";
-				*++simple_command_a = NULL;
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				while ((node_type_peek() != WHILE) && (node_type_peek() != UNTIL) ) {
+					if (node_type_peek() == ERROR) {
+						fprintf(stderr, "Shell command syntax error, unmatched loop initiator\n");
+						exit(1);
+					}
+
+					node_pop();
+				}
+				ct_temp2 = new_command();
+				if(node_type_peek() == WHILE){
+					ct_temp2->type = WHILE_COMMAND;
+				}
+				else
+					ct_temp2->type = UNTIL_COMMAND;
+				ct_temp2->u.command[1] = cmd_pop(&top);
+				ct_temp2->u.command[0] = cmd_pop(&top);
+				cmd_push (ct_temp2, &top, &ctstacksize);
+				ct_temp1 = ct_temp2 = NULL;
+				simple_command_a = NULL;
+				node_pop();
 				break;
 			case UNTIL:
-				if (!ct_temp1) {
-					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
-					ct_temp1->u.word = simple_command_a;
-				}
-				*simple_command_a = "until";
-				*++simple_command_a = NULL;
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				until_open++;
+				node_push(current_keyword);
 				break;
 			case OPEN_PARENS:
 				cmd_push (ct_temp1, &top, &ctstacksize);
@@ -664,6 +679,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				}
 				ct_temp1 = NULL;
 				simple_command_a = NULL;
+				if(!(next_keyword->data->type == DO) && !(next_keyword->data->type == THEN) && !(next_keyword->data->type == ELSE))
 				node_push(current_keyword);
 				break;
 			case NEWLINE:
@@ -674,7 +690,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
 					cmd_push (ct_temp1, &top, &ctstacksize);
 				}
-				if (!paren_open) {
+				if (!paren_open && !while_open && !until_open) {
 					cmd_stream_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
 					cmd_stream_temp->command = cmd_pop(&top);
 					cmd_stream = cmd_stream_append(cmd_stream, cmd_stream_temp);
