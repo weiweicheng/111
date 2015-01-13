@@ -61,6 +61,7 @@ enum keywordtype {
 	DONE,
 	WORD,
 	NEWLINE,
+	ERROR,
 };
 
 typedef struct keyword {
@@ -329,8 +330,17 @@ enum keywordtype node_type_peek() {
 		if (key_stack)
 			return key_stack->data->type;
 		else
-			return -1;
+			return ERROR;
 }
+
+int stackPrec(enum keywordtype keyword) {
+	return -1;
+}
+
+int streamPrec(enum keywordtype keyword) {
+	return -1;
+}
+
 
 keyword_node* node_pop () {
 	keyword_node* node_top = NULL;
@@ -388,7 +398,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	cmd_stack = (command_t*) checked_malloc(ctstacksize);
 
 	while(current_keyword) {
-		next_keyword = &(current_keyword->next);
+		next_keyword = *(current_keyword->next);
 		switch(current_keyword->data->type) {
 			case OPEN_PARENS:
 				cmd_push (ct_temp1, &top, &ctstacksize);
@@ -405,7 +415,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				cmd_push (ct_temp1, &top, &ctstacksize);
 				paren_open--;
 				while (node_type_peek() != OPEN_PARENS) {
-					if (node_type_peek() == -1) {
+					if (node_type_peek() == ERROR) {
 						fprintf(stderr, "Shell command syntax error, unmatched ')'\n");
 						exit(1);
 					}
@@ -440,14 +450,14 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 						exit(1);
 					}
 				}
-				if (next_keyword && next_keyword->data->type == WORD) {
-					ct_temp1->output = next_keyword->data->word;
+				if (current_keyword->next != NULL && next_keyword.data->type == WORD) {
+					ct_temp1->output = next_keyword.data->word;
 					cmd_push (ct_temp1, &top, &ctstacksize);
 					ct_temp1 = NULL;
 					simple_command_a = NULL;
-					current_keyword = next_keyword;
+					current_keyword = &next_keyword;
 					if (current_keyword)
-						next_keyword = current_keyword->next;
+						next_keyword = *(current_keyword->next);
 					}
 				break;
 
@@ -459,14 +469,14 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 						exit(1);
 					}
 				}
-				if (next_keyword && next_keyword->data->type == WORD) {
-					ct_temp1->input = next_keyword->data->word;
+				if (current_keyword->next && next_keyword.data->type == WORD) {
+					ct_temp1->input = next_keyword.data->word;
 					cmd_push (ct_temp1, &top, &ctstacksize);
 					ct_temp1 = NULL;
 					simple_command_a = NULL;
-					current_keyword = next_keyword;
+					current_keyword = &next_keyword;
 					if (current_keyword)
-							next_keyword = current_keyword->next;
+							next_keyword = *(current_keyword->next);
 				}
 				break;
 
@@ -477,7 +487,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
 					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
-					cmd_push (ct_temp, &top, &ctstacksize);
+					cmd_push (ct_temp1, &top, &ctstacksize);
 				}
 				ct_temp1 = NULL;
 				simple_command_a = NULL;
