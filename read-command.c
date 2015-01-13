@@ -333,12 +333,44 @@ enum keywordtype node_type_peek() {
 			return ERROR;
 }
 
-int stackPrec(enum keywordtype keyword) {
-	return -1;
+int stack_precedence(enum keywordtype keyword) {
+	switch(keyword) {
+		case SEQUENCE:
+		case NEWLINE:
+			return 2;
+		case PIPELINE:
+			return 4;
+		case OUTPUT:
+		case INPUT:
+			return 6;
+		case OPEN_PARENS:
+		case IF:
+		case UNTIL:
+		case WHILE:
+			return 0;
+		default:
+			return -1;
+	}
 }
 
-int streamPrec(enum keywordtype keyword) {
-	return -1;
+int node_precedence(enum keywordtype keyword) {
+	switch(keyword) {
+		case SEQUENCE:
+		case NEWLINE:
+			return 1;
+		case PIPELINE:
+			return 3;
+		case OUTPUT:
+		case INPUT:
+			return 5;
+		case OPEN_PARENS:
+		case IF:
+		case UNTIL:
+		case WHILE:
+			return 7;
+		default:
+			return -1;
+	}
 }
 
 
@@ -483,7 +515,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			case PIPELINE:
 			case SEQUENCE:
 				cmd_push (ct_temp1, &top, &ctstacksize);
-				while (stackPrec(node_type_peek()) > streamPrec(current_keyword->data->type)) {
+				while (stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
 					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
@@ -495,7 +527,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				break;
 			case NEWLINE:
 				cmd_push (ct_temp1, &top, &ctstacksize);
-				while (stackPrec(node_type_peek()) > streamPrec(current_keyword->data->type)) {
+				while (stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
 					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
