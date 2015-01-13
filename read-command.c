@@ -343,7 +343,7 @@ keyword_node* node_pop () {
 
 
 command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
-	keyword_node* current_keyword, next_keyword;
+	struct keyword_node* current_keyword, next_keyword;
 	command_t ct_temp1, ct_temp2, cmd1, cmd2;
 	command_stream_t cmd_stack_temp, cmd_stream;
 
@@ -362,7 +362,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	cmd_stack = (command_t*) checked_malloc(ctstacksize);
 
 	while(current_keyword) {
-		next_keyword = &current_keyword->next;
+		next_keyword = &(current_keyword->next);
 		switch(current_keyword->data->type) {
 			case OPEN_PARENS:
 				cmd_push (ct_temp1, &top, &ctstacksize);
@@ -396,6 +396,66 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				ct_temp1 = ct_temp2 = NULL;
 				simple_command_a = NULL;
 				node_pop();
+				break;
+			case WORD:
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(160*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
+				}
+				*simple_command_a = current_keyword->data->word;
+				*++simple_command_a = NULL;
+				break;
+			case OUTPUT:
+				if (!ct_temp1) {
+					ct_temp1 = cmd_pop(&top);
+					if (!ct_temp1) {
+						fprintf(stderr,"Syntax incorrect for OP REDIR command\n");
+						exit(1);
+					}
+				}
+				if (next_keyword && next_keyword->data->type == WORD) {
+					ct_temp1->output = next_keyword->data->word;
+					cmd_push (ct_temp1, &top, &ctstacksize);
+					ct_temp1 = NULL;
+					simple_command_a = NULL;
+					current_keyword = next_keyword;
+					if (current_keyword)
+						next_keyword = current_keyword->next;
+					}
+				break;
+
+			case INPUT:
+				if (!ct_temp1) {
+					ct_temp1 = cmd_pop(&top);
+					if (!ct_temp1) {
+						fprintf(stderr,"Syntax incorrect for IP REDIR command\n");
+						exit(1);
+					}
+				}
+				if (next_keyword && next_keyword->data->type == WORD) {
+					ct_temp1->input = next_keyword->data->word;
+					cmd_push (ct_temp1, &top, &ctstacksize);
+					ct_temp1 = NULL;
+					simple_command_a = NULL;
+					current_keyword = next_keyword;
+					if (current_keyword)
+							next_keyword = current_keyword->next;
+				}
+				break;
+
+			case PIPELINE:
+			case SEQUENCE:
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				while (stackPrec(node_type_peek()) > streamPrec(current_keyword->data->type)) {
+					cmd2 = cmd_pop(&top);
+					cmd1 = cmd_pop(&top);
+					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
+					cmd_push (ct_temp, &top, &ctstacksize);
+				}
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				node_push(current_keyword);
 				break;
 			default:
 				break;
