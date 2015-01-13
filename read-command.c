@@ -45,23 +45,23 @@ typedef struct command_stream {
 }command_stream;
 
 enum keywordtype {
-	SEQUENCE,
-	PIPELINE,
-	OPEN_PARENS,
-	CLOSE_PARENS,
-	INPUT,
-	OUTPUT,
-	IF,
-	THEN,
-	ELSE,
-	FI,
-	WHILE,
-	UNTIL,
-	DO,
-	DONE,
-	WORD,
-	NEWLINE,
-	ERROR,
+	SEQUENCE,	//0
+	PIPELINE,	//1
+	OPEN_PARENS,	//2
+	CLOSE_PARENS,	//3
+	INPUT,		//4
+	OUTPUT,		//5
+	IF,		//6
+	THEN,		//7
+	ELSE,		//8
+	FI,		//9
+	WHILE,		//10
+	UNTIL,		//11
+	DO,			//12
+	DONE,		//13
+	WORD,		//14
+	NEWLINE,	//15
+	ERROR,		//16
 };
 
 typedef struct keyword {
@@ -468,7 +468,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			case WORD:
 				if (!ct_temp1) {
 					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(160*sizeof(char*));
+					simple_command_a = (char **) checked_malloc(160*sizeof(char*));			//TODO why 160?? arbitrary
 					ct_temp1->u.word = simple_command_a;
 				}
 				*simple_command_a = current_keyword->data->word;
@@ -560,9 +560,9 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			fprintf(stderr,"Syntax error\n");
 			exit(1);
 		}
-		return cmd_stream;
-
+		current_keyword = current_keyword->next;
 	}
+	return cmd_stream;
 }
 
 command_stream_t
@@ -813,7 +813,6 @@ enum command_type token_to_command(char *token) {
 command_t
 read_command_stream (command_stream_t s)
 {
-
 	if (s->iter == 0){
 		s->iter = 1;
 		return s->command;
