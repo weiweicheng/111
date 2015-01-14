@@ -258,6 +258,66 @@ void validate_stream(keyword_node *root) {			// const stuff?
 	}
 }
 
+void printKeywordList(keyword_node* cur) {
+
+
+	int i = 0;
+	while(cur->next != NULL) {
+		if(cur->data->word)
+			printf("Keyword %d: %s\n", (int) i, cur->data->word);
+			else
+				switch(cur->data->type) {
+					case SEQUENCE:
+					printf("Keyword %d: SEQUENCE\n", i);
+					break;
+					case PIPELINE:
+					printf("Keyword %d: PIPELINE\n", i);
+					break;
+					case OPEN_PARENS:
+					printf("Keyword %d: OPEN_PARENS\n", i);
+					break;
+					case CLOSE_PARENS:
+					printf("Keyword %d: CLOSE_PARENS\n", i);
+					break;
+					case INPUT:
+					printf("Keyword %d: INPUT\n", i);
+					break;
+					case OUTPUT:
+					printf("Keyword %d: OUTPUT\n", i);
+					break;
+					case IF:
+					printf("Keyword %d: IF\n", i);
+					break;
+					case ELSE:
+					printf("Keyword %d: ELSE\n", i);
+					break;
+					case THEN:
+					printf("Keyword %d: THEN\n", i);
+					break;
+					case FI:
+					printf("Keyword %d: FI\n", i);
+					break;
+					case WHILE:
+					printf("Keyword %d: WHILE\n", i);
+					break;
+					case UNTIL:
+					printf("Keyword %d: UNTIL\n", i);
+					break;
+					case DO:
+					printf("Keyword %d: DO\n", i);
+					break;
+					case DONE:
+					printf("Keyword %d: DONE\n", i);
+					break;
+					case NEWLINE:
+					printf("Keyword %d: NEWLINE\n", i);
+					break;
+				}
+				cur = cur->next;
+				i++;
+			}
+}
+
 command_t
 new_command () {
 	command_t cmd = (command_t) checked_malloc(sizeof(struct command));
@@ -343,15 +403,21 @@ void node_push (keyword_node* keyword) {
 	printf("node pushed: %d\n", keyword->data->type);
 	if (keyword == NULL)
 		return;
+	keyword_node* temp = (keyword_node*) checked_malloc(sizeof(keyword_node));
+	temp->data = checked_malloc(sizeof(keyword));
+	temp->data->type = keyword->data->type;
+	temp->data->line = keyword->data->line;
+	temp->data->word = keyword->data->word;
+
 	if (key_stack == NULL) { //
-			key_stack = keyword;
+			key_stack = temp;
 			key_stack->prev = key_stack->next = NULL;
 		}
 	else {
-			keyword->next = key_stack;
-			keyword->prev = NULL;
-			key_stack->prev = keyword;
-			key_stack = keyword;
+			temp->next = key_stack;
+			temp->prev = NULL;
+			key_stack->prev = temp;
+			key_stack = temp;
 		}
 	}
 
@@ -441,7 +507,8 @@ command_stream_t cmd_stream_append (command_stream_t cmd_stream, command_stream_
 	}
 
 command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
-	struct keyword_node* current_keyword, next_keyword;
+	struct keyword_node* current_keyword;
+	struct keyword_node* next_keyword;
 	command_t ct_temp1, ct_temp2, cmd1, cmd2;
 	command_stream_t cmd_stream_temp, cmd_stream;
 
@@ -461,55 +528,77 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 
 	int i;
 	while(current_keyword) {
+
 		printf("Iteration %d: working on current keyword %d\n", i++, current_keyword->data->type);
-		next_keyword = *(current_keyword->next);
+		if(current_keyword->data->type == WORD)
+			printf("Word is '%s'\n", current_keyword->data->word);
+		next_keyword = current_keyword->next;
 		switch(current_keyword->data->type) {
 
-			/*case IF:
-				cmd_push (ct_temp1, &top, &ctstacksize);
-				ct_temp1 = NULL;
-				simple_command_a = NULL;
-				if_open++;
-				node_push(current_keyword);
+
+			case IF:
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
+				}
+				*simple_command_a = "if";
+				*++simple_command_a = NULL;
 				break;
 			case THEN:
-				if (!if_open) {
-					fprintf(stderr, "No matching if for then'\n");
-					exit(1);
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
 				}
-				cmd_push (ct_temp1, &top, &ctstacksize);
-				ct_temp1 = NULL;
-				simple_command_a = NULL;
-
+				*simple_command_a = "then";
+				*++simple_command_a = NULL;
 				break;
 			case FI:
-				if (!if_open) {
-					fprintf(stderr, "No matching if for fi'\n");
-					exit(1);
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
 				}
-				cmd_push (ct_temp1, &top, &ctstacksize);
-				if_open--;
-				while (node_type_peek() != IF) {
-					if (node_type_peek() == ERROR) {
-						fprintf(stderr, "Shell command syntax error, unmatched 'fi'\n");
-						exit(1);
-					}
-					cmd2 = cmd_pop(&top);
-					cmd1 = cmd_pop(&top);
-					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());	//
-					cmd_push (ct_temp1, &top, &ctstacksize);
-					ct_temp1 = NULL;
-				}
-				ct_temp2 = new_command();
-				ct_temp2->type = IF_COMMAND;
-				ct_temp2->u.command[1] = cmd_pop(&top);
-				ct_temp2->u.command[0] = cmd_pop(&top);
-				cmd_push (ct_temp2, &top, &ctstacksize);
-				ct_temp1 = ct_temp2 = NULL;
-				simple_command_a = NULL;
-				node_pop();
+				*simple_command_a = "fi";
+				*++simple_command_a = NULL;
 				break;
-				*/
+			case WHILE:
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
+				}
+				*simple_command_a = "while";
+				*++simple_command_a = NULL;
+				break;
+			case DO:
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
+				}
+				*simple_command_a = "do";
+				*++simple_command_a = NULL;
+				break;
+			case DONE:
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
+				}
+				*simple_command_a = "done";
+				*++simple_command_a = NULL;
+				break;
+			case UNTIL:
+				if (!ct_temp1) {
+					ct_temp1 = new_command();
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
+					ct_temp1->u.word = simple_command_a;
+				}
+				*simple_command_a = "until";
+				*++simple_command_a = NULL;
+				break;
 			case OPEN_PARENS:
 				cmd_push (ct_temp1, &top, &ctstacksize);
 				ct_temp1 = NULL;
@@ -560,14 +649,14 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 						exit(1);
 					}
 				}
-				if (current_keyword->next != NULL && next_keyword.data->type == WORD) {
-					ct_temp1->output = next_keyword.data->word;
+				if (current_keyword->next != NULL && next_keyword->data->type == WORD) {
+					ct_temp1->output = next_keyword->data->word;
 					cmd_push (ct_temp1, &top, &ctstacksize);
 					ct_temp1 = NULL;
 					simple_command_a = NULL;
-					current_keyword = &next_keyword;
+					current_keyword = next_keyword;
 					if (current_keyword)
-						next_keyword = *(current_keyword->next);
+						next_keyword = current_keyword->next;
 					}
 				break;
 
@@ -579,14 +668,14 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 						exit(1);
 					}
 				}
-				if (current_keyword->next && next_keyword.data->type == WORD) {
-					ct_temp1->input = next_keyword.data->word;
+				if (current_keyword->next && next_keyword->data->type == WORD) {
+					ct_temp1->input = next_keyword->data->word;
 					cmd_push (ct_temp1, &top, &ctstacksize);
 					ct_temp1 = NULL;
 					simple_command_a = NULL;
-					current_keyword = &next_keyword;
+					current_keyword = next_keyword;
 					if (current_keyword)
-							next_keyword = *(current_keyword->next);
+							next_keyword = current_keyword->next;
 				}
 				break;
 
@@ -596,7 +685,6 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				while (stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
-					printf("Called here");
 					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
 					cmd_push (ct_temp1, &top, &ctstacksize);
 				}
@@ -623,14 +711,10 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			default:
 				break;
 			}
-			if(current_keyword->data->type == WORD)
-				printf("Word is '%s'\n", current_keyword->data->word);
-
 			current_keyword = current_keyword->next;
-
 		} //END-WHILE
 
-		printf("Got out of while loop");
+		printf("Got out of while loop\n");
 
 		cmd_push (ct_temp1, &top, &ctstacksize);
 		while (node_type_peek() != ERROR) {
@@ -819,64 +903,9 @@ make_command_stream (int (*get_next_byte) (void *),
 		input_iterator++; //Check later
 	} //END-WHILE
 
-	cur = root;
-	int i = 0;
-	while(cur->next != NULL) {
-		if(cur->data->word)
-			printf("Keyword %d: %s\n", (int) i, cur->data->word);
-		else
-			switch(cur->data->type) {
-				case SEQUENCE:
-					printf("Keyword %d: SEQUENCE\n", i);
-					break;
-				case PIPELINE:
-					printf("Keyword %d: PIPELINE\n", i);
-					break;
-				case OPEN_PARENS:
-					printf("Keyword %d: OPEN_PARENS\n", i);
-					break;
-				case CLOSE_PARENS:
-					printf("Keyword %d: CLOSE_PARENS\n", i);
-					break;
-				case INPUT:
-					printf("Keyword %d: INPUT\n", i);
-					break;
-				case OUTPUT:
-					printf("Keyword %d: OUTPUT\n", i);
-					break;
-				case IF:
-					printf("Keyword %d: IF\n", i);
-					break;
-				case ELSE:
-					printf("Keyword %d: ELSE\n", i);
-					break;
-				case THEN:
-					printf("Keyword %d: THEN\n", i);
-					break;
-				case FI:
-					printf("Keyword %d: FI\n", i);
-					break;
-				case WHILE:
-					printf("Keyword %d: WHILE\n", i);
-					break;
-				case UNTIL:
-					printf("Keyword %d: UNTIL\n", i);
-					break;
-				case DO:
-					printf("Keyword %d: DO\n", i);
-					break;
-				case DONE:
-					printf("Keyword %d: DONE\n", i);
-					break;
-				case NEWLINE:
-					printf("Keyword %d: NEWLINE\n", i);
-					break;
-			}
-		cur = cur->next;
-		i++;
-	}
 
-		//VALIDATE
+		//TODO:VALIDATE
+		printKeywordList(root);
 		command_stream_t sequence_stream = token_2_command_stream(root);
 
   	return sequence_stream;
