@@ -539,39 +539,54 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 		next_keyword = current_keyword->next;
 
 		//Weird case where newlines act like sequences
-		if(next_keyword && next_keyword->next && current_keyword->data->type == DONE && next_keyword->data->type == NEWLINE && next_keyword->next->data->type == WORD) {
-			next_keyword->data->type=SEQUENCE;
-			printf("Did this work?=========================\n");
-		}
+
 
 		switch(current_keyword->data->type) {
 
 			case IF:
-				if (!ct_temp1) {
-					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
-					ct_temp1->u.word = simple_command_a;
-				}
-				*simple_command_a = "if";
-				*++simple_command_a = NULL;
-				break;
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				if_open++;
+				node_push(current_keyword);
+			break;
 			case THEN:
-				if (!ct_temp1) {
-					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
-					ct_temp1->u.word = simple_command_a;
-				}
-				*simple_command_a = "then";
-				*++simple_command_a = NULL;
+			case ELSE:
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				if((node_type_peek()==NEWLINE)||(node_type_peek()==SEQUENCE))
+					node_pop();
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				node_push(current_keyword);
 				break;
 			case FI:
-				if (!ct_temp1) {
-					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));
-					ct_temp1->u.word = simple_command_a;
+				if (!if_open) {
+					fprintf(stderr, "No initator for loop'\n");
+					exit(1);
 				}
-				*simple_command_a = "fi";
-				*++simple_command_a = NULL;
+				bool is_else = false;
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				while (node_type_peek() != IF)  {
+					if (node_type_peek() == ERROR) {
+						fprintf(stderr, "Shell command syntax error, unmatched loop initiator\n");
+						exit(1);
+					}
+
+					if (node_type_peek() == ELSE)
+						is_else=true;
+					node_pop();
+				}
+				ct_temp2 = new_command();
+				ct_temp2->type = IF_COMMAND;
+				if(is_else)
+					ct_temp2->u.command[2] = cmd_pop(&top);
+				ct_temp2->u.command[1] = cmd_pop(&top);
+				ct_temp2->u.command[0] = cmd_pop(&top);
+				cmd_push (ct_temp2, &top, &ctstacksize);
+				if_open--;
+				ct_temp1 = ct_temp2 = NULL;
+				simple_command_a = NULL;
+				node_pop();
 				break;
 			case WHILE:
 				cmd_push (ct_temp1, &top, &ctstacksize);
@@ -605,15 +620,21 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				ct_temp2 = new_command();
 				if(node_type_peek() == WHILE){
 					ct_temp2->type = WHILE_COMMAND;
+					while_open--;
 				}
-				else
+				else {
 					ct_temp2->type = UNTIL_COMMAND;
+					until_open--;
+				}
 				ct_temp2->u.command[1] = cmd_pop(&top);
 				ct_temp2->u.command[0] = cmd_pop(&top);
 				cmd_push (ct_temp2, &top, &ctstacksize);
 				ct_temp1 = ct_temp2 = NULL;
 				simple_command_a = NULL;
 				node_pop();
+				if(next_keyword && next_keyword->next && current_keyword->data->type == DONE && next_keyword->data->type == NEWLINE && next_keyword->next->data->type == WORD && key_stack) {
+					next_keyword->data->type=SEQUENCE;
+				}
 				break;
 			case UNTIL:
 				cmd_push (ct_temp1, &top, &ctstacksize);
@@ -717,6 +738,8 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				node_push(current_keyword);
 				break;
 			case NEWLINE:
+				if(current_keyword->next && current_keyword->next->data->type == NEWLINE)
+					break;
 				cmd_push (ct_temp1, &top, &ctstacksize);
 				while ((stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) && (top>0)) {
 					cmd2 = cmd_pop(&top);
@@ -724,7 +747,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
 					cmd_push (ct_temp1, &top, &ctstacksize);
 				}
-				if (!paren_open && !while_open && !until_open) {
+				if (!paren_open && !while_open && !until_open &&!if_open) {
 					cmd_stream_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
 					cmd_stream_temp->command = cmd_pop(&top);
 					cmd_stream = cmd_stream_append(cmd_stream, cmd_stream_temp);
