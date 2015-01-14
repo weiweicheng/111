@@ -537,8 +537,14 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 		if(current_keyword->data->type == WORD)
 			printf("Word is '%s'\n", current_keyword->data->word);
 		next_keyword = current_keyword->next;
-		switch(current_keyword->data->type) {
 
+		//Weird case where newlines act like sequences
+		if(next_keyword && next_keyword->next && current_keyword->data->type == DONE && next_keyword->data->type == NEWLINE && next_keyword->next->data->type == WORD) {
+			next_keyword->data->type=SEQUENCE;
+			printf("Did this work?=========================\n");
+		}
+
+		switch(current_keyword->data->type) {
 
 			case IF:
 				if (!ct_temp1) {
@@ -707,12 +713,12 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				}
 				ct_temp1 = NULL;
 				simple_command_a = NULL;
-				if(!(next_keyword->data->type == DO) && !(next_keyword->data->type == THEN) && !(next_keyword->data->type == ELSE))
+				if(!(next_keyword->data->type == DO) && !(next_keyword->data->type == THEN) && !(next_keyword->data->type == ELSE) && !(next_keyword->data->type == DONE))
 				node_push(current_keyword);
 				break;
 			case NEWLINE:
 				cmd_push (ct_temp1, &top, &ctstacksize);
-				while (stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) {
+				while ((stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) && (top>0)) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
 					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
@@ -747,6 +753,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 		cmd_stream = cmd_stream_append(cmd_stream, cmd_stream_temp);
 		ct_temp1 = NULL;
 		if (cmd_pop(&top)) {
+
 			fprintf(stderr,"Syntax error\n");
 			exit(1);
 		}
@@ -825,7 +832,7 @@ make_command_stream (int (*get_next_byte) (void *),
 				for(; i < word_len; i++) {
 					word[i]=*(input_stream+beginning_of_word+i);
 				}
-				if (strcmp(word, "if") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)){
+				if (strcmp(word, "if") == 0 && (cur == NULL || (cur->data->type != INPUT && cur->data->type != OUTPUT && cur->data->type != WORD && cur->data->type != FI && cur->data->type != DONE))){
 					type = IF;
 					free(word);
 					word = NULL;
@@ -845,12 +852,12 @@ make_command_stream (int (*get_next_byte) (void *),
 					free(word);
 					word = NULL;
 				}
-				else if (strcmp(word, "while") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)) {
+				else if (strcmp(word, "while") == 0 && (cur == NULL || (cur->data->type != INPUT && cur->data->type != OUTPUT && cur->data->type != WORD && cur->data->type != FI && cur->data->type != DONE))) {
 					type = WHILE;
 					free(word);
 					word = NULL;
 				}
-				else if (strcmp(word, "until") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)) {
+				else if (strcmp(word, "until") == 0 && (cur == NULL || (cur->data->type != INPUT && cur->data->type != OUTPUT && cur->data->type != WORD && cur->data->type != FI && cur->data->type != DONE))) {
 					type = UNTIL;
 					free(word);
 					word = NULL;
@@ -866,7 +873,6 @@ make_command_stream (int (*get_next_byte) (void *),
 					word = NULL;
 				}
 			}
-
 
 		if(token_char(&current_c)) {
 			word = NULL;
