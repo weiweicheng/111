@@ -314,6 +314,8 @@ void printKeywordList(keyword_node* cur) {
 					case NEWLINE:
 					printf("Keyword %d: NEWLINE\n", i);
 					break;
+					default:
+					break;
 				}
 				cur = cur->next;
 				i++;
@@ -339,7 +341,7 @@ void cmd_push(command_t cmd, int *top, size_t* cmd_stack_size) {
 	if (*cmd_stack_size == ((*top+1)*sizeof(command_t)))
 			cmd_stack = (command_t*) checked_grow_alloc(cmd_stack, cmd_stack_size);
 	cmd_stack[++*top] = cmd;
-	printf("cpushed type - %d, top %d\n", cmd->type, *top);
+	//printf("cmd_pushed type - %d, top %d\n", cmd->type, *top);
 }
 
 command_t cmd_pop (int *top) {
@@ -350,7 +352,7 @@ command_t cmd_pop (int *top) {
 			--*top;
 		else
 				*top = -1;
-	printf("cpoped type - %d, top %d\n", cmd->type, *top);
+	//printf("cmd_popped type - %d, top %d\n", cmd->type, *top);
 	}
 	return cmd;
 }
@@ -402,7 +404,7 @@ command_t cmd_merge (command_t cmd1, command_t cmd2, keyword_node* keyword) {
 }
 
 void node_push (keyword_node* keyword) {
-	printf("node pushed: %d\n", keyword->data->type);
+	//printf("node pushed: %d\n", keyword->data->type);
 	if (keyword == NULL)
 		return;
 	keyword_node* temp = (keyword_node*) checked_malloc(sizeof(keyword_node));
@@ -482,12 +484,12 @@ keyword_node* node_pop () {
 		if(key_stack)
 			key_stack->prev = NULL;
 		}
-	printf("node popped: %d\n", node_top->data->type);
+	//printf("node popped: %d\n", node_top->data->type);
 	return node_top;
 }
 
 command_stream_t cmd_stream_append (command_stream_t cmd_stream, command_stream_t cmd) {
-	printf("append to stream\n");
+	//printf("append to stream\n");
 	if (!cmd)
 		return cmd_stream;
 		if (!cmd_stream) { //empty
@@ -533,9 +535,9 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	int i = 0;
 	while(current_keyword) {
 
-		printf("Iteration %d: working on current keyword %d\n", i++, current_keyword->data->type);
-		if(current_keyword->data->type == WORD)
-			printf("Word is '%s'\n", current_keyword->data->word);
+		//printf("Iteration %d: working on current keyword %d\n", i++, current_keyword->data->type);
+	//	if(current_keyword->data->type == WORD)
+		//	printf("Word is '%s'\n", current_keyword->data->word);
 		next_keyword = current_keyword->next;
 
 		//Weird case where newlines act like sequences
@@ -761,7 +763,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			current_keyword = current_keyword->next;
 		} //END-WHILE
 
-		printf("Got out of while loop\n");
+		//printf("Got out of while loop\n");
 
 		cmd_push (ct_temp1, &top, &ctstacksize);
 		while (node_type_peek() != ERROR) {
@@ -951,8 +953,7 @@ make_command_stream (int (*get_next_byte) (void *),
 	} //END-WHILE
 
 
-		//TODO:VALIDATE
-		printKeywordList(root);
+		validate_stream(root);
 		command_stream_t sequence_stream = token_2_command_stream(root);
 
   	return sequence_stream;
