@@ -178,16 +178,17 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				k_type_prev = INPUT;
 				break;
 			case OUTPUT:
-				if(k_type_prev != WORD || iter == 0) {		// check this??
-					fprintf(stderr, "Output must follow word.\n");
+				if((k_type_prev != WORD && k_type_prev != DONE && k_type_prev != FI) || iter == 0) {		// check this??
+					fprintf(stderr, "Line %d: Output must follow word.\n", current->data->line);
 					exit(1);
 				}
 				k_type_prev = OUTPUT;
 				break;
 			case IF:
-				if(k_type_prev != ???)
+				//	if(k_type_prev != ???)
 				k_type_prev = IF;
 				in_if++;
+				//printf("Number of ifs: %d\n", in_if);
 				need_then++;
 				break;
 			case THEN:
@@ -199,6 +200,7 @@ void validate_stream(keyword_node *root) {			// const stuff?
 					fprintf(stderr, "Line %d: Unneccesary 'then' token", current->data->line);
 					exit(1);
 				}
+				//printf("Number of thens: %d\n", need_then);
 				need_then--;
 				k_type_prev = THEN;
 				break;
@@ -228,11 +230,11 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				need_do++;
 				break;
 			case DO:
-				if(in_while <= 0 && in_until <= 0){	// think about this: is this necessary?
+				if(in_while_until <= 0){	// think about this: is this necessary?
 					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
 					exit(1);
 				}
-				if(needed_do < 1) {
+				if(need_do < 1) {
 					fprintf(stderr, "Line %d: Unneccessary 'do' token.", current->data->line);
 					exit(1);
 				}
@@ -800,54 +802,54 @@ make_command_stream (int (*get_next_byte) (void *),
 			type = WORD;
 			while (word_char(*(input_stream+input_iterator+word_len)))
 				word_len++;
-			input_iterator += word_len-1;
-			word= checked_malloc(sizeof(char)*(word_len+1));
-			bzero(word, sizeof(char)*(word_len+1));
-			size_t i=0;
-			for(; i < word_len; i++) {
-				word[i]=*(input_stream+beginning_of_word+i);
+				input_iterator += word_len-1;
+				word= checked_malloc(sizeof(char)*(word_len+1));
+				bzero(word, sizeof(char)*(word_len+1));
+				size_t i=0;
+				for(; i < word_len; i++) {
+					word[i]=*(input_stream+beginning_of_word+i);
+				}
+				if (strcmp(word, "if") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)){
+					type = IF;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "then") == 0) {
+					type = THEN;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "else") == 0) {
+					type = ELSE;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "fi") == 0) {
+					type = FI;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "while") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)) {
+					type = WHILE;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "until") == 0 && (cur->data->type != INPUT || cur->data->type != OUTPUT || cur->data->type != WORD || cur->data->type != FI || cur->data->type != DONE)) {
+					type = UNTIL;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "do") == 0) {
+					type = DO;
+					free(word);
+					word = NULL;
+				}
+				else if (strcmp(word, "done") == 0) {
+					type = DONE;
+					free(word);
+					word = NULL;
+				}
 			}
-			if (strcmp(word, "if") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)){
-				type = IF;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "then") == 0) {
-				type = THEN;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "else") == 0) {
-				type = ELSE;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "fi") == 0) {
-				type = FI;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "while") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
-				type = WHILE;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "until") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
-				type = UNTIL;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "do") == 0) {
-				type = DO;
-				free(word);
-				word = NULL;
-			}
-			else if (strcmp(word, "done") == 0) {
-				type = DONE;
-				free(word);
-				word = NULL;
-			}
-		}
 
 
 		if(token_char(&current_c)) {
