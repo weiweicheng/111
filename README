@@ -1,4 +1,18 @@
 This is a skeleton for CS 111 Lab 1.
 
-Replace this README file with notes on your implementation.
-Mentions any special features or limitations.
+Authors: Wei-Wei Cheng (204134636)
+	 Isabel Martin (504168696)
+
+The goal of Lab1 is to be able to parse an input sh file into some data structure that we can then use to execute the structure in later parts.
+We split the task into smaller managable tasks, which are categorized below.
+
+Task 1.) Read the input into a buffer for us to process. For this part, we just stored the input into a cstring.
+Task 2.) Iterating through each character in the buffer we made in step 1, we categorized each set of characters into a stream of keywords.
+	 It is important to note that these keywords are not keywords in a language, but important words that will be the building blocks for a command.
+Task 3.) Validation. We iterate through the stream of keywords and make sure that the syntax is correct, so that we can convert the keywords into commands.
+Task 4.) Converting keywords to commands. We built two stacks, a keyword stack and command stack. As we iterate through the keyword stream
+	 we add certain keywords to the keyword stack based on a set precedence in order to make commands.
+
+Notes:
+Limitations: We hardcoded a case where if there is a case such as ' ... done\nfalse', the newline is converted to a sequence command. There may be more cases
+		in which newlines are converted to sequences which we did not account for.

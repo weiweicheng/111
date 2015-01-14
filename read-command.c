@@ -78,6 +78,8 @@ typedef struct keyword_node {
 
 keyword_node *key_stack = NULL;
 command_t *cmd_stack = NULL;
+keyword_node *ifstack = NULL;
+keyword_node *loopstack = NULL;
 
 char *read_input(int (*get_next_byte) (void *), void *get_next_byte_argument) {
 	char char_c;
@@ -123,6 +125,83 @@ bool token_char(char *sequence) {
 			return false;
 	}
 }
+
+enum keywordtype generic_peek(keyword_node* keyword) {
+	if (keyword->data->type == IF|| keyword->data->type == ELSE || keyword->data->type == THEN || keyword->data->type == FI) {
+	if (ifstack)
+		return ifstack->data->type;
+		else
+			return ERROR;
+	}
+	if (keyword->data->type == WHILE|| keyword->data->type == UNTIL || keyword->data->type == DO || keyword->data->type == DONE) {
+		if (loopstack)
+			return loopstack->data->type;
+			else
+				return ERROR;
+			}
+	return ERROR;
+	}
+
+keyword_node* generic_pop (keyword_node* keyword) {
+		keyword_node* node_top = NULL;
+		if (keyword->data->type == IF|| keyword->data->type == ELSE || keyword->data->type == THEN || keyword->data->type == FI)
+			if (ifstack) {
+				node_top = ifstack;
+				ifstack = ifstack->next;
+				node_top->next = node_top->prev = NULL;
+				if(ifstack)
+					ifstack->prev = NULL;
+				}
+		if (keyword->data->type == WHILE|| keyword->data->type == UNTIL || keyword->data->type == DO || keyword->data->type == DONE)
+			if (loopstack) {
+				node_top = loopstack;
+				loopstack = loopstack->next;
+				node_top->next = node_top->prev = NULL;
+				if(loopstack)
+					loopstack->prev = NULL;
+				}
+
+
+				//printf("node popped: %d\n", node_top->data->type);
+				return node_top;
+}
+
+void generic_push (keyword_node* keyword) {
+	//printf("node pushed: %d\n", keyword->data->type);
+	if (keyword == NULL)
+		return;
+		keyword_node* temp = (keyword_node*) checked_malloc(sizeof(keyword_node));
+		temp->data = checked_malloc(sizeof(keyword));
+		temp->data->type = keyword->data->type;
+		temp->data->line = keyword->data->line;
+		temp->data->word = keyword->data->word;
+
+		if (keyword->data->type == IF|| keyword->data->type == ELSE || keyword->data->type == THEN) {
+		if (ifstack == NULL) { //
+			ifstack = temp;
+			ifstack->prev = ifstack->next = NULL;
+		}	else {
+			temp->next = ifstack;
+			temp->prev = NULL;
+			ifstack->prev = temp;
+			ifstack = temp;
+		}
+
+		}
+		if (keyword->data->type == WHILE|| keyword->data->type == DO || keyword->data->type == UNTIL) {
+			if (loopstack == NULL) { //
+				loopstack = temp;
+				loopstack->prev = loopstack->next = NULL;
+			}
+
+		else {
+			temp->next = loopstack;
+			temp->prev = NULL;
+			loopstack->prev = temp;
+			loopstack = temp;
+		}
+	}
+	}
 
 void validate_stream(keyword_node *root) {			// const stuff?
 	int active_parens = 0;
@@ -170,15 +249,15 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				k_type_prev = PIPELINE;
 				break;
 			case INPUT:
-				if(k_type_prev != WORD || iter == 0) {		// check this??
-					fprintf(stderr, "Input must follow word.\n");
+				if(k_type_prev != WORD || iter == 0 || (current->next && current->next->data->type != WORD)) {		// check this??
+					fprintf(stderr, "Line %d: Input must follow word.\n", current->data->line);
 					exit(1);
 				}
 				// Do we need to check if file exists?
 				k_type_prev = INPUT;
 				break;
 			case OUTPUT:
-				if((k_type_prev != WORD && k_type_prev != DONE && k_type_prev != FI) || iter == 0) {		// check this??
+				if((k_type_prev != WORD && k_type_prev != DONE && k_type_prev != FI) || iter == 0 || (current->next && current->next->data->type != WORD)) {		// check this??
 					fprintf(stderr, "Line %d: Output must follow word.\n", current->data->line);
 					exit(1);
 				}
@@ -188,44 +267,66 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				//	if(k_type_prev != ???)
 				k_type_prev = IF;
 				in_if++;
+				generic_push(current);
 				//printf("Number of ifs: %d\n", in_if);
 				need_then++;
 				break;
 			case THEN:
 				if (in_if <= 0) {
-					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					fprintf(stderr, "Line %d: Not in an if statement\n", current->data->line);
 					exit(1);
 				}
 				if (need_then < 1) {
-					fprintf(stderr, "Line %d: Unneccesary 'then' token", current->data->line);
+					fprintf(stderr, "Line %d: Unneccesary 'then' token\n", current->data->line);
 					exit(1);
 				}
+				if(generic_peek(current) != IF) {
+					fprintf(stderr, "Line %d:  No matching if statement\n", current->data->line);
+					exit(1);
+				}
+				generic_push(current);
 				//printf("Number of thens: %d\n", need_then);
 				need_then--;
 				k_type_prev = THEN;
 				break;
 			case ELSE:
 				if (in_if==0) {
-					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					fprintf(stderr, "Line %d: Not in an if statement\n", current->data->line);
 					exit(1);
 				}
+				if(generic_peek(current) != THEN) {
+					fprintf(stderr, "Line %d:  No matching then\n", current->data->line);
+					exit(1);
+				}
+				generic_push(current);
 				k_type_prev = ELSE;
 				break;
 			case FI:
 				if(in_if==0){
-					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					fprintf(stderr, "Line %d: Not in an if statement\n", current->data->line);
 					exit(1);
 				}
+				if(generic_peek(current) != THEN && generic_peek(current) != ELSE) {
+					fprintf(stderr, "Line %d:  Dangling Fi\n", current->data->line);
+					exit(1);
+				}
+				while(generic_peek(current) != IF)
+				{
+					generic_pop(current);
+				}
+				generic_pop(current);
 				k_type_prev = FI;
 				in_if--;
 				break;
 			case WHILE:
 				k_type_prev = WHILE;
+				generic_push(current);
 				in_while_until++;
 				need_do++;
 				break;
 			case UNTIL:
 				k_type_prev = UNTIL;
+				generic_push(current);
 				in_while_until++;
 				need_do++;
 				break;
@@ -238,6 +339,11 @@ void validate_stream(keyword_node *root) {			// const stuff?
 					fprintf(stderr, "Line %d: Unneccessary 'do' token.", current->data->line);
 					exit(1);
 				}
+				if(generic_peek(current) != WHILE && generic_peek(current) != UNTIL) {
+					fprintf(stderr, "Line %d:  No matching while or until\n", current->data->line);
+					exit(1);
+				}
+				generic_push(current);
 				need_do--;
 				k_type_prev = DO;
 				break;
@@ -246,6 +352,19 @@ void validate_stream(keyword_node *root) {			// const stuff?
 					fprintf(stderr, "Line %d: Not in a loop", current->data->line);
 					exit(1);
 				}
+				if (current->next && ((current->next->data->type != NEWLINE) && (current->next->data->type != SEQUENCE) && (current->next->data->type != OUTPUT) && (current->next->data->type != CLOSE_PARENS))) {
+					fprintf(stderr, "Line %d: Invalid character following DONE", current->data->line);
+					exit(1);
+				}
+				if(generic_peek(current) != DO) {
+					fprintf(stderr, "Line %d:  Dangling Done\n", current->data->line);
+					exit(1);
+				}
+				while(generic_peek(current) != WHILE && generic_peek(current) != UNTIL)
+				{
+					generic_pop(current);
+				}
+				generic_pop(current);
 				in_while_until--;
 				k_type_prev=DONE;
 				break;
@@ -432,6 +551,19 @@ enum keywordtype node_type_peek() {
 			return ERROR;
 }
 
+keyword_node* node_pop () {
+	keyword_node* node_top = NULL;
+	if (key_stack) {
+		node_top = key_stack;
+		key_stack = key_stack->next;
+		node_top->next = node_top->prev = NULL;
+		if(key_stack)
+			key_stack->prev = NULL;
+		}
+		//printf("node popped: %d\n", node_top->data->type);
+		return node_top;
+	}
+
 int stack_precedence(enum keywordtype keyword) {
 	switch(keyword) {
 		case SEQUENCE:
@@ -475,18 +607,7 @@ int node_precedence(enum keywordtype keyword) {
 }
 
 
-keyword_node* node_pop () {
-	keyword_node* node_top = NULL;
-	if (key_stack) {
-		node_top = key_stack;
-		key_stack = key_stack->next;
-		node_top->next = node_top->prev = NULL;
-		if(key_stack)
-			key_stack->prev = NULL;
-		}
-	//printf("node popped: %d\n", node_top->data->type);
-	return node_top;
-}
+
 
 command_stream_t cmd_stream_append (command_stream_t cmd_stream, command_stream_t cmd) {
 	//printf("append to stream\n");
@@ -532,19 +653,15 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	size_t ctstacksize = 16*sizeof(command_t);
 	cmd_stack = (command_t*) checked_malloc(ctstacksize);
 
-	int i = 0;
+	//int i = 0;
 	while(current_keyword) {
 
-		//printf("Iteration %d: working on current keyword %d\n", i++, current_keyword->data->type);
+	//	printf("Iteration %d: working on current keyword %d\n", i++, current_keyword->data->type);
 	//	if(current_keyword->data->type == WORD)
-		//	printf("Word is '%s'\n", current_keyword->data->word);
+	//		printf("Word is '%s'\n", current_keyword->data->word);
 		next_keyword = current_keyword->next;
 
-		//Weird case where newlines act like sequences
-
-
 		switch(current_keyword->data->type) {
-
 			case IF:
 				cmd_push (ct_temp1, &top, &ctstacksize);
 				ct_temp1 = NULL;
@@ -812,8 +929,10 @@ make_command_stream (int (*get_next_byte) (void *),
 	enum keywordtype type;
 
 	while((current_c = *(input_stream+input_iterator)) != '\0') {
+		bool valid_char = false;
 		switch(current_c) {
 		     case '\n':
+					valid_char = true;
 					type = NEWLINE;
 					current_line++;
 					int counter = 1;
@@ -830,6 +949,7 @@ make_command_stream (int (*get_next_byte) (void *),
 						exit(1);
 						continue;
 					}
+					valid_char = true;
 					counter = 1;
 					while ((input_stream[input_iterator+counter] != '\0') && (input_stream[input_iterator+counter] != '\n'))
 			  		counter++; //we are in a comment
@@ -837,6 +957,7 @@ make_command_stream (int (*get_next_byte) (void *),
 					continue;
 		     case ' ':
 		     case '\t':
+					valid_char = true;
 					input_iterator++;
 					continue;
 		     default:
@@ -847,6 +968,7 @@ make_command_stream (int (*get_next_byte) (void *),
 		size_t word_len = 1;
 		char* word = NULL;
 		if(word_char(current_c)) {
+			valid_char = true;
 			type = WORD;
 			while (word_char(*(input_stream+input_iterator+word_len)))
 				word_len++;
@@ -899,7 +1021,8 @@ make_command_stream (int (*get_next_byte) (void *),
 				}
 			}
 
-		if(token_char(&current_c)) {
+		else if(token_char(&current_c)) {
+			valid_char = true;
 			word = NULL;
 			switch(current_c) {
 				case ';':
@@ -931,6 +1054,11 @@ make_command_stream (int (*get_next_byte) (void *),
 			}
 		}
 
+		if(!valid_char){
+			fprintf(stderr, "Not a valid character\n");
+			exit(1);
+		}
+
 
 		keyword_node* temp = (keyword_node*) checked_malloc(sizeof(keyword_node));
 		temp->data = checked_malloc(sizeof(keyword));
@@ -951,7 +1079,6 @@ make_command_stream (int (*get_next_byte) (void *),
 
 		input_iterator++; //Check later
 	} //END-WHILE
-
 
 		validate_stream(root);
 		command_stream_t sequence_stream = token_2_command_stream(root);
