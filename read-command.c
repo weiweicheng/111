@@ -132,9 +132,9 @@ void validate_stream(keyword_node *root) {			// const stuff?
 	enum keywordtype k_type_prev;
 	keyword_node *current = root;
 	int in_if = 0;
-	int in_while = 0;
-	int in_until = 0;
-
+	int in_while_until = 0;
+	int need_then = 0;		// incremented after seeing if, decremented after seeing then
+	int need_do = 0;		// incremented after seeing while/until, decremented after seeing do
 
 	while(current) {
 		k_type_cur = current->data->type;
@@ -185,8 +185,22 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				k_type_prev = OUTPUT;
 				break;
 			case IF:
+				if(k_type_prev != ???)
 				k_type_prev = IF;
 				in_if++;
+				need_then++;
+				break;
+			case THEN:
+				if (in_if <= 0) {
+					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
+					exit(1);
+				}
+				if (need_then < 1) {
+					fprintf(stderr, "Line %d: Unneccesary 'then' token", current->data->line);
+					exit(1);
+				}
+				need_then--;
+				k_type_prev = THEN;
 				break;
 			case ELSE:
 				if (in_if==0) {
@@ -205,22 +219,34 @@ void validate_stream(keyword_node *root) {			// const stuff?
 				break;
 			case WHILE:
 				k_type_prev = WHILE;
-				in_while++;
+				in_while_until++;
+				need_do++;
 				break;
 			case UNTIL:
 				k_type_prev = UNTIL;
-				in_until++;
+				in_while_until++;
+				need_do++;
 				break;
 			case DO:
-				if(in_while==0 && in_until==0){
+				if(in_while <= 0 && in_until <= 0){	// think about this: is this necessary?
 					fprintf(stderr, "Line %d: Not in an if statement", current->data->line);
 					exit(1);
 				}
+				if(needed_do < 1) {
+					fprintf(stderr, "Line %d: Unneccessary 'do' token.", current->data->line);
+					exit(1);
+				}
+				need_do--;
 				k_type_prev = DO;
 				break;
 			case DONE:
-				//NEED TO CHECK IF MOST RECENT IS WHILE OR UNTIL
-				k_type_prev=DO;
+				if (in_while_until < 1) {
+					fprintf(stderr, "Line %d: Not in a loop", current->data->line);
+					exit(1);
+				}
+				in_while_until--;
+				k_type_prev=DONE;
+				break;
 			case WORD:
 				k_type_prev = WORD;
 				break;
@@ -251,6 +277,7 @@ void cmd_push(command_t cmd, int *top, size_t* cmd_stack_size) {
 	if (*cmd_stack_size == ((*top+1)*sizeof(command_t)))
 			cmd_stack = (command_t*) checked_grow_alloc(cmd_stack, cmd_stack_size);
 	cmd_stack[++*top] = cmd;
+	printf("cpushed type - %d, top %d\n", cmd->type, *top);
 }
 
 command_t cmd_pop (int *top) {
@@ -261,11 +288,13 @@ command_t cmd_pop (int *top) {
 			--*top;
 		else
 				*top = -1;
-		}
+	printf("cpoped type - %d, top %d\n", cmd->type, *top);
+	}
 	return cmd;
 }
 
 command_t cmd_merge (command_t cmd1, command_t cmd2, keyword_node* keyword) {
+
 	if (!keyword) {
 		fprintf(stderr, "Syntax error - command type unidentified\n");
 		exit(1);
@@ -278,11 +307,11 @@ command_t cmd_merge (command_t cmd1, command_t cmd2, keyword_node* keyword) {
 		if (keyword->data->type == PIPELINE)
 			ctype = "|";
 		if (keyword->data->type == IF)
-			ctype = "i";
+			ctype = "if";
 		if (keyword->data->type == WHILE)
-			ctype = "w";
+			ctype = "while";
 		if (keyword->data->type == UNTIL)
-			ctype = "u";
+			ctype = "until";
 		else
 			fprintf(stderr, "Syntax error - command type incorrect\n");
 
@@ -311,7 +340,7 @@ command_t cmd_merge (command_t cmd1, command_t cmd2, keyword_node* keyword) {
 }
 
 void node_push (keyword_node* keyword) {
-	//printf("tspushed %d\n", item->m_token.type);
+	printf("node pushed: %d\n", keyword->data->type);
 	if (keyword == NULL)
 		return;
 	if (key_stack == NULL) { //
@@ -383,11 +412,12 @@ keyword_node* node_pop () {
 		if(key_stack)
 			key_stack->prev = NULL;
 		}
+	printf("node popped: %d\n", node_top->data->type);
 	return node_top;
 }
 
 command_stream_t cmd_stream_append (command_stream_t cmd_stream, command_stream_t cmd) {
-	//printf("cappend\n");
+	printf("append to stream\n");
 	if (!cmd)
 		return cmd_stream;
 		if (!cmd_stream) { //empty
@@ -429,9 +459,57 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 	size_t ctstacksize = 16*sizeof(command_t);
 	cmd_stack = (command_t*) checked_malloc(ctstacksize);
 
+	int i;
 	while(current_keyword) {
+		printf("Iteration %d: working on current keyword %d\n", i++, current_keyword->data->type);
 		next_keyword = *(current_keyword->next);
 		switch(current_keyword->data->type) {
+
+			/*case IF:
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+				if_open++;
+				node_push(current_keyword);
+				break;
+			case THEN:
+				if (!if_open) {
+					fprintf(stderr, "No matching if for then'\n");
+					exit(1);
+				}
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				ct_temp1 = NULL;
+				simple_command_a = NULL;
+
+				break;
+			case FI:
+				if (!if_open) {
+					fprintf(stderr, "No matching if for fi'\n");
+					exit(1);
+				}
+				cmd_push (ct_temp1, &top, &ctstacksize);
+				if_open--;
+				while (node_type_peek() != IF) {
+					if (node_type_peek() == ERROR) {
+						fprintf(stderr, "Shell command syntax error, unmatched 'fi'\n");
+						exit(1);
+					}
+					cmd2 = cmd_pop(&top);
+					cmd1 = cmd_pop(&top);
+					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());	//
+					cmd_push (ct_temp1, &top, &ctstacksize);
+					ct_temp1 = NULL;
+				}
+				ct_temp2 = new_command();
+				ct_temp2->type = IF_COMMAND;
+				ct_temp2->u.command[1] = cmd_pop(&top);
+				ct_temp2->u.command[0] = cmd_pop(&top);
+				cmd_push (ct_temp2, &top, &ctstacksize);
+				ct_temp1 = ct_temp2 = NULL;
+				simple_command_a = NULL;
+				node_pop();
+				break;
+				*/
 			case OPEN_PARENS:
 				cmd_push (ct_temp1, &top, &ctstacksize);
 				ct_temp1 = NULL;
@@ -453,7 +531,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 					}
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
-					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
+					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
 					cmd_push (ct_temp1, &top, &ctstacksize);
 					ct_temp1 = NULL;
 				}
@@ -468,7 +546,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			case WORD:
 				if (!ct_temp1) {
 					ct_temp1 = new_command();
-					simple_command_a = (char **) checked_malloc(160*sizeof(char*));			//TODO why 160?? arbitrary
+					simple_command_a = (char **) checked_malloc(1024*sizeof(char*));		// fix
 					ct_temp1->u.word = simple_command_a;
 				}
 				*simple_command_a = current_keyword->data->word;
@@ -518,7 +596,8 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				while (stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
-					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
+					printf("Called here");
+					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
 					cmd_push (ct_temp1, &top, &ctstacksize);
 				}
 				ct_temp1 = NULL;
@@ -530,7 +609,7 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				while (stack_precedence(node_type_peek()) > node_precedence(current_keyword->data->type)) {
 					cmd2 = cmd_pop(&top);
 					cmd1 = cmd_pop(&top);
-					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
+					ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
 					cmd_push (ct_temp1, &top, &ctstacksize);
 				}
 				if (!paren_open) {
@@ -543,12 +622,21 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 				break;
 			default:
 				break;
-		}
+			}
+			if(current_keyword->data->type == WORD)
+				printf("Word is '%s'\n", current_keyword->data->word);
+
+			current_keyword = current_keyword->next;
+
+		} //END-WHILE
+
+		printf("Got out of while loop");
+
 		cmd_push (ct_temp1, &top, &ctstacksize);
 		while (node_type_peek() != ERROR) {
 			cmd2 = cmd_pop(&top);
 			cmd1 = cmd_pop(&top);
-			ct_temp1 = cmd_merge(cmd1, cmd2, node_pop());
+			ct_temp1 = cmd_merge(cmd1, cmd2, node_pop()); //
 			cmd_push (ct_temp1, &top, &ctstacksize);
 		}
 		cmd_stream_temp = (command_stream_t) checked_malloc(sizeof(command_stream));
@@ -560,10 +648,11 @@ command_stream_t token_2_command_stream (keyword_node *keyword_stream) {
 			fprintf(stderr,"Syntax error\n");
 			exit(1);
 		}
-		current_keyword = current_keyword->next;
-	}
-	return cmd_stream;
+		return cmd_stream;
 }
+
+
+
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
@@ -635,42 +724,42 @@ make_command_stream (int (*get_next_byte) (void *),
 				word[i]=*(input_stream+beginning_of_word+i);
 			}
 			if (strcmp(word, "if") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)){
-				cur->data->type = IF;
+				type = IF;
 				free(word);
 				word = NULL;
 			}
 			else if (strcmp(word, "then") == 0) {
-				cur->data->type = THEN;
+				type = THEN;
 				free(word);
 				word = NULL;
 			}
 			else if (strcmp(word, "else") == 0) {
-				cur->data->type = ELSE;
+				type = ELSE;
 				free(word);
 				word = NULL;
 			}
 			else if (strcmp(word, "fi") == 0) {
-				cur->data->type = FI;
+				type = FI;
 				free(word);
 				word = NULL;
 			}
 			else if (strcmp(word, "while") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
-				cur->data->type = WHILE;
+				type = WHILE;
 				free(word);
 				word = NULL;
 			}
 			else if (strcmp(word, "until") == 0 && (cur->data->type == NEWLINE || cur->data->type == PIPELINE || cur->data->type == SEQUENCE)) {
-				cur->data->type = UNTIL;
+				type = UNTIL;
 				free(word);
 				word = NULL;
 			}
 			else if (strcmp(word, "do") == 0) {
-				cur->data->type = DO;
+				type = DO;
 				free(word);
 				word = NULL;
 			}
 			else if (strcmp(word, "done") == 0) {
-				cur->data->type = DONE;
+				type = DONE;
 				free(word);
 				word = NULL;
 			}
@@ -730,7 +819,7 @@ make_command_stream (int (*get_next_byte) (void *),
 		input_iterator++; //Check later
 	} //END-WHILE
 
-/*	cur = root;
+	cur = root;
 	int i = 0;
 	while(cur->next != NULL) {
 		if(cur->data->word)
@@ -756,36 +845,36 @@ make_command_stream (int (*get_next_byte) (void *),
 					printf("Keyword %d: OUTPUT\n", i);
 					break;
 				case IF:
-					printf("IF\n");
+					printf("Keyword %d: IF\n", i);
 					break;
 				case ELSE:
-					printf("ELSE\n");
+					printf("Keyword %d: ELSE\n", i);
 					break;
 				case THEN:
-					printf("THEN\n");
+					printf("Keyword %d: THEN\n", i);
 					break;
 				case FI:
-					printf("FI\n");
+					printf("Keyword %d: FI\n", i);
 					break;
 				case WHILE:
-					printf("WHILE\n");
+					printf("Keyword %d: WHILE\n", i);
 					break;
 				case UNTIL:
-					printf("UNTIL\n");
+					printf("Keyword %d: UNTIL\n", i);
 					break;
 				case DO:
-					printf("DO\n");
+					printf("Keyword %d: DO\n", i);
 					break;
 				case DONE:
-					printf("DONE\n");
+					printf("Keyword %d: DONE\n", i);
 					break;
 				case NEWLINE:
-					printf("NEWLINE\n");
+					printf("Keyword %d: NEWLINE\n", i);
 					break;
 			}
 		cur = cur->next;
 		i++;
-	} */
+	}
 
 		//VALIDATE
 		command_stream_t sequence_stream = token_2_command_stream(root);
