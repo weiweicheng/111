@@ -114,7 +114,8 @@ void execute_sequence(command_t c, int profiling)
 }
 
 void execute_while(command_t c, int profiling) {
-  //TODO: Check false case
+
+  execute_command(c->u.command[0], profiling);
   while(c->u.command[0]->status == 0)
   {
     execute_command(c->u.command[1], profiling);
@@ -125,17 +126,16 @@ void execute_while(command_t c, int profiling) {
 
 void execute_until (command_t c, int profiling) {
   //TODO: Needs to be fixed
-
-  do
+  execute_command(c->u.command[0], profiling);
+  while((c->u.command[0]->status != 0))
   {
     execute_command(c->u.command[1], profiling);
     c->status = c->u.command[1]->status;
-  } while ((c->u.command[0]->status != 0));
+  }
 
 }
 
-void
-execute_pipe (command_t c, int profiling)
+void execute_pipe (command_t c, int profiling)
 {
   int status;
   int buf[2];
@@ -220,8 +220,7 @@ void execute_simple(command_t c, int profiling)
 }
 
 
-int
-command_status (command_t c)
+int command_status (command_t c)
 {
   return c->status;
 }
@@ -229,19 +228,18 @@ command_status (command_t c)
 void execute_if(command_t c, int profiling)
 {
   execute_command(c->u.command[0], profiling);
-  if (c->u.command[0]->status == 0)		// a is true
+  if (c->u.command[0]->status == 0)
   {
     execute_command(c->u.command[1], profiling);
     c->status = c->u.command[1]->status;
   }
-  else if (c->u.command[2]){				// if a is false and there is else clause
+  else if (c->u.command[2]) {
     execute_command(c->u.command[2], profiling);
     c->status = c->u.command[2]->status;
   }
 }
 
-void
-execute_command (command_t c, int profiling)
+void execute_command (command_t c, int profiling)
 {
 
   switch(c->type)
