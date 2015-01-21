@@ -125,7 +125,7 @@ void execute_while(command_t c, int profiling) {
 }
 
 void execute_until (command_t c, int profiling) {
-  //TODO: Needs to be fixed
+
   execute_command(c->u.command[0], profiling);
   while((c->u.command[0]->status != 0))
   {
