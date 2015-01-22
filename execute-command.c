@@ -18,6 +18,7 @@
 #include "command.h"
 #include "command-internals.h"
 
+#include <time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -28,6 +29,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/resource.h>
 
 void setup_io(command_t c); //Done
 void execute_simple(command_t c, int profiling); //Done
@@ -44,7 +46,7 @@ prepare_profiling (char const *name)
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-  error (0, 0, "warning: profiling not yet implemented");
+  //return open(name);
   return -1;
 }
 
@@ -146,7 +148,7 @@ void execute_pipe (command_t c, int profiling)
 
   if(pipe(fd) == -1)
     error(1, errno, "Pipe could not be created.\n");
-  
+
   pid_1 = fork();
 
   switch(pid_1) {
@@ -163,7 +165,7 @@ void execute_pipe (command_t c, int profiling)
   }
 
   pid_2 = fork();
-  
+
   switch(pid_2) {
     case 0:   // pid_1 is a child process
       close(fd[1]);
@@ -204,6 +206,16 @@ void execute_simple(command_t c, int profiling)
   int status;
   pid_t pid = fork();
 
+  struct timespec func_start, func_end, realClk;
+  clock_gettime(CLOCK_MONOTONIC, &func_start);
+
+  struct rusage usage;
+  struct timeval sys_start, sys_end, user_start, user_end;
+
+  getrusage(RUSAGE_CHILDREN, &usage);
+  sys_start = usage.ru_stime;
+  user_start = usage.ru_utime;
+
   switch(pid)
   {
   case -1:
@@ -222,6 +234,23 @@ void execute_simple(command_t c, int profiling)
     c->status = status;
     break;
   }
+
+  getrusage(RUSAGE_CHILDREN, &usage);
+  sys_end = usage.ru_stime;
+  user_end = usage.ru_utime;
+
+  clock_gettime(CLOCK_MONOTONIC, &func_end);
+  clock_gettime(CLOCK_REALTIME, &realClk);
+  double accum = ( func_end.tv_sec - func_start.tv_sec )
+  + ( func_end.tv_nsec - func_start.tv_nsec )
+  / 1E9;
+  double timefinished = (realClk.tv_sec + realClk.tv_nsec/1E9);
+  double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/1E6;
+  double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/1E6;
+
+
+  printf( "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, system_time, user_end.tv_usec );
+  printf( "%s\n", c->u.word[0]);
 }
 
 
