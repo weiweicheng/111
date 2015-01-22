@@ -71,7 +71,7 @@ main (int argc, char **argv)
     {
       profiling = prepare_profiling (profile_name);
       if (profiling < 0)
-	error (1, errno, "%s: cannot open", profile_name);
+	       error (1, errno, "%s: cannot open", profile_name);
     }
 
   command_t last_command = NULL;
