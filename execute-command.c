@@ -143,49 +143,54 @@ void execute_pipe (command_t c, int profiling)
   pid_t pid_1;
   pid_t pid_2;
 
-  if ( pipe(fd) == -1 )
-    error (1, errno, "Pipe could not be created.\n");
+
+  if(pipe(fd) == -1)
+    error(1, errno, "Pipe could not be created.\n");
+  
   pid_1 = fork();
-  if( pid_1 > 0 ) { //Parent process
-    pid_2 = fork();
-    if( pid_2 > 0 ) { //Parent process
-      //Close inputs and outputs of parent process
+
+  switch(pid_1) {
+    case 0:
       close(fd[0]);
-      close(fd[1]);
-      // Wait for any process to finish
-      return_pid = waitpid(-1, &status, 0);
-      if( return_pid == pid_1 ) {
-        c->status = status;
-        waitpid(pid_2, &status, 0);
-        return;
-      }
-      else if(return_pid == pid_2) {
-        waitpid(pid_1, &status, 0);
-        c->status = status;
-        return;
-      }
-    }
-    else if( pid_2 == 0 ) {
-      // The 2nd child now runs, left command of the pipe
-      close(fd[0]);
-      if( dup2(fd[1], 1) < 0 )
-        error (1, errno,  "There was an error redirecting STDOUT.\n");
+      if(dup2(fd[1], 1) < 0)
+        error(1, errno, "There was an error redirecting STDOUT.\n");
       execute_command(c->u.command[0], profiling);
       _exit(c->u.command[0]->status);
-    }
-    else
-      error(1, 0, "Could not fork\n");
+    case -1:
+      error(1, 0, "Could not fork.\n");
+    default:
+      break;
   }
-  else if( pid_1 == 0) {
-    // First child, right command in the pipe
-    close(fd[1]);
-    if( dup2(fd[0], 0) < 0 )
-      error (1, errno,  "There was an error redirecting STDIN\n");
-    execute_command(c->u.command[1], profiling);
-    _exit(c->u.command[1]->status);
+
+  pid_2 = fork();
+  
+  switch(pid_2) {
+    case 0:   // pid_1 is a child process
+      close(fd[1]);
+      if(dup2(fd[0], 0) < 0)
+        error(1, errno, "There was an error redirecting STDIN.\n");
+      execute_command(c->u.command[1], profiling);
+      _exit(c->u.command[1]->status);
+    case -1:
+      error(1, 0, "Could not fork.\n");
+    default:
+      break;    /// does parent process not do anything? maybe this is what goes to wait
   }
-  else
-    error(1, 0, "Could not fork");
+
+  close(fd[0]);
+  close(fd[1]);
+
+  return_pid = waitpid(-1, &status, 0);
+  if(return_pid == pid_1) {
+    c->status = status;
+    waitpid(pid_2, &status, 0);
+    return;
+  }
+  else if(return_pid == pid_2) {
+    c->status = status;
+    waitpid(pid_1, &status, 0);
+    return;
+  }
 }
 
 void execute_subshell(command_t c, int profiling) {
@@ -241,7 +246,6 @@ void execute_if(command_t c, int profiling)
 
 void execute_command (command_t c, int profiling)
 {
-
   switch(c->type)
   {
     case IF_COMMAND:
