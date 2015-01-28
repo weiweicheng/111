@@ -49,11 +49,7 @@ void execute_subshell(command_t c, int profiling); //Done
 int
 prepare_profiling (char const *name)
 {
-  /* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
-  //return open(name);
-  return -1;
+  return open(name, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
 }
 
 void setup_io(command_t c)
@@ -225,7 +221,6 @@ void execute_simple(command_t c, int profiling)
 {
     int status;
     pid_t pid = fork();
-
   struct timespec func_start, func_end, realClk;
   clock_gettime(CLOCK_MONOTONIC, &func_start);
 
@@ -268,15 +263,14 @@ void execute_simple(command_t c, int profiling)
   double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/MILLION;
   double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
 
-
-  printf( "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, system_time, user_time );
-  printf( "%s ", c->u.word[0]);
+  dprintf(profiling, "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, user_time, system_time );
+  dprintf(profiling, "%s ", c->u.word[0]);
   int i = 1;
   while(c->u.word[i]) {
-  	printf("%s ", c->u.word[i]);
+  	dprintf(profiling, "%s ", c->u.word[i]);
   	i++;
   }
-  printf("\n");
+  dprintf(profiling, "\n");
 }
 
 
