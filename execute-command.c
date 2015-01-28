@@ -267,7 +267,7 @@ void execute_simple(command_t c, int profiling)
   double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
 
 
-  printf( "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, system_time, user_end.tv_usec );
+  printf( "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, system_time, user_time );
   printf( "%s ", c->u.word[0]);
   int i = 1;
   while(c->u.word[i]) {
