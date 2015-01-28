@@ -18,6 +18,7 @@
 #include "command.h"
 #include "command-internals.h"
 
+#include <time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -28,9 +29,13 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
 #include <time.h>
 
-#define BILLION 1E9;
+#define BILLION 1E9
+#define MILLION 1E6
+
+#include <sys/resource.h>
 
 void setup_io(command_t c); //Done
 void execute_simple(command_t c, int profiling); //Done
@@ -47,7 +52,7 @@ prepare_profiling (char const *name)
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-  error (0, 0, "warning: profiling not yet implemented");
+  //return open(name);
   return -1;
 }
 
@@ -149,7 +154,7 @@ void execute_pipe (command_t c, int profiling)
 
   if(pipe(fd) == -1)
     error(1, errno, "Pipe could not be created.\n");
-  
+
   pid_1 = fork();
 
   switch(pid_1) {
@@ -166,7 +171,7 @@ void execute_pipe (command_t c, int profiling)
   }
 
   pid_2 = fork();
-  
+
   switch(pid_2) {
     case 0:   // pid_1 is a child process
       close(fd[1]);
@@ -219,24 +224,57 @@ void execute_simple(command_t c, int profiling)
     int status;
     pid_t pid = fork();
 
-    switch(pid)
-    {
-        case -1:
-            error(1, 0, "Could not fork proccess");
-            break;
-        case 0: //child process
-            setup_io(c);
-            if(c->u.word[0][0] == ':')
-                _exit(0);
-            // Execute the simple command program
-            execvp(c->u.word[0], c->u.word );
-            error(1, 0, "Simple command '%s' not found\n", c->u.word[0]);
-            break;
-        default:
-            waitpid(pid, &status, 0);
-            c->status = status;
-            break;
-    }
+  struct timespec func_start, func_end, realClk;
+  clock_gettime(CLOCK_MONOTONIC, &func_start);
+
+  struct rusage usage;
+  struct timeval sys_start, sys_end, user_start, user_end;
+
+  getrusage(RUSAGE_CHILDREN, &usage);
+  sys_start = usage.ru_stime;
+  user_start = usage.ru_utime;
+
+  switch(pid)
+  {
+  case -1:
+    error(1, 0, "Could not fork proccess");
+    break;
+  case 0: //child process
+    setup_io(c);
+    if(c->u.word[0][0] == ':')
+      _exit(0);
+    // Execute the simple command program
+    execvp(c->u.word[0], c->u.word );
+    error(1, 0, "Simple command '%s' not found\n", c->u.word[0]);
+    break;
+  default:
+    waitpid(pid, &status, 0);
+    c->status = status;
+    break;
+  }
+
+  getrusage(RUSAGE_CHILDREN, &usage);
+  sys_end = usage.ru_stime;
+  user_end = usage.ru_utime;
+
+  clock_gettime(CLOCK_MONOTONIC, &func_end);
+  clock_gettime(CLOCK_REALTIME, &realClk);
+  double accum = ( func_end.tv_sec - func_start.tv_sec )
+  + ( func_end.tv_nsec - func_start.tv_nsec )
+  / BILLION;
+  double timefinished = (realClk.tv_sec + realClk.tv_nsec/BILLION);
+  double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/MILLION;
+  double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
+
+
+  printf( "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, system_time, user_end.tv_usec );
+  printf( "%s ", c->u.word[0]);
+  int i = 1;
+  while(c->u.word[i]) {
+  	printf("%s ", c->u.word[i]);
+  	i++;
+  }
+  printf("\n");
 }
 
 
