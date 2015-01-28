@@ -28,13 +28,16 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <time.h>
+
+#define BILLION 1E9;
 
 void setup_io(command_t c); //Done
 void execute_simple(command_t c, int profiling); //Done
 void execute_sequence(command_t c, int profiling); //Done
 void execute_if(command_t c, int profiling); //Done
 void execute_while(command_t c, int profiling); //Done
-void execute_until(command_t c, int profiling);
+void execute_until(command_t c, int profiling); // Done
 void execute_pipe(command_t c, int profiling); //Done
 void execute_subshell(command_t c, int profiling); //Done
 
@@ -195,33 +198,45 @@ void execute_pipe (command_t c, int profiling)
 
 void execute_subshell(command_t c, int profiling) {
   setup_io(c);
+
+  struct timespec start, stop, elapsed;
+  double t, elapsed_t;
+
+  clock_gettime(CLOCK_MONOTONIC, &start);
   execute_command(c->u.command[0], profiling);
+  clock_gettime(CLOCK_MONOTONIC, &stop);
+  clock_gettime(CLOCK_REALTIME, &elapsed);
+
+  t = (stop.tv_sec - start.tv_sec) + (stop.tv_nsec - start.tv_nsec)/BILLION;
+  elapsed_t = elapsed.tv_sec + elapsed.tv_nsec/BILLION;
+  printf(" %lf %lf\n", elapsed_t, t);
+
   c->status = c->u.command[0]->status;
 }
 
 void execute_simple(command_t c, int profiling)
 {
-  int status;
-  pid_t pid = fork();
+    int status;
+    pid_t pid = fork();
 
-  switch(pid)
-  {
-  case -1:
-    error(1, 0, "Could not fork proccess");
-    break;
-  case 0: //child process
-    setup_io(c);
-    if(c->u.word[0][0] == ':')
-      _exit(0);
-    // Execute the simple command program
-    execvp(c->u.word[0], c->u.word );
-    error(1, 0, "Simple command '%s' not found\n", c->u.word[0]);
-    break;
-  default:
-    waitpid(pid, &status, 0);
-    c->status = status;
-    break;
-  }
+    switch(pid)
+    {
+        case -1:
+            error(1, 0, "Could not fork proccess");
+            break;
+        case 0: //child process
+            setup_io(c);
+            if(c->u.word[0][0] == ':')
+                _exit(0);
+            // Execute the simple command program
+            execvp(c->u.word[0], c->u.word );
+            error(1, 0, "Simple command '%s' not found\n", c->u.word[0]);
+            break;
+        default:
+            waitpid(pid, &status, 0);
+            c->status = status;
+            break;
+    }
 }
 
 
