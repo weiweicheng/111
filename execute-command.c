@@ -167,6 +167,7 @@ void execute_pipe (command_t c, int profiling)
     case -1:
       error(1, 0, "Could not fork.\n");
     default:
+    	printf("proud papa\n");
       break;
   }
 
@@ -182,6 +183,7 @@ void execute_pipe (command_t c, int profiling)
     case -1:
       error(1, 0, "Could not fork.\n");
     default:
+    	printf("proud mama\n");
       break;    /// does parent process not do anything? maybe this is what goes to wait
   }
 
