@@ -20,6 +20,13 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <time.h>
+#include <sys/resource.h>
+#define BILLION 1E9
+#define MILLION 1E6
+
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "command.h"
 
@@ -68,27 +75,61 @@ main (int argc, char **argv)
     make_command_stream (get_next_byte, script_stream);
   int profiling = -1;
   if (profile_name)
-    {
+  {
       profiling = prepare_profiling (profile_name);
       if (profiling < 0)
 	       error (1, errno, "%s: cannot open", profile_name);
-    }
+  }
+
+  struct timespec func_start, func_end, realClk;
+  struct rusage usage;
+  struct timeval sys_start, sys_end, user_start, user_end;
+
+  if(profiling != -1) {
+    clock_gettime(CLOCK_MONOTONIC, &func_start);
+
+
+    getrusage(RUSAGE_CHILDREN, &usage);
+    sys_start = usage.ru_stime;
+    user_start = usage.ru_utime;
+
+  }
 
   command_t last_command = NULL;
   command_t command;
   while ((command = read_command_stream (command_stream)))
-    {
+  {
       if (print_tree)
-	{
-	  printf ("# %d\n", command_number++);
-	  print_command (command);
-	}
+	    {
+	        printf ("# %d\n", command_number++);
+	        print_command (command);
+	    }
       else
-	{
-	  last_command = command;
-	  execute_command (command, profiling);
-	}
-    }
+	    {
+         last_command = command;
+         execute_command (command, profiling);
+	    }
+  }
+
+  if (profiling !=-1) {
+    getrusage(RUSAGE_CHILDREN, &usage);
+    sys_end = usage.ru_stime;
+    user_end = usage.ru_utime;
+
+    clock_gettime(CLOCK_MONOTONIC, &func_end);
+    clock_gettime(CLOCK_REALTIME, &realClk);
+    double accum = ( func_end.tv_sec - func_start.tv_sec )
+    + ( func_end.tv_nsec - func_start.tv_nsec )
+    / BILLION;
+    double timefinished = (realClk.tv_sec + realClk.tv_nsec/BILLION);
+    double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/MILLION;
+    double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
+
+    dprintf(profiling, "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, user_time, system_time );
+    dprintf(profiling, "[%d]", getpid());
+    dprintf(profiling, "\n");
+
+  }
 
   return print_tree || !last_command ? 0 : command_status (last_command);
 }
