@@ -1,0 +1,3 @@
+echo hello my love | tr a-z A-Z
+cat test-input | tr a-z A-Z | sort -n
+(echo lol)
