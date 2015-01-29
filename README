@@ -16,3 +16,24 @@ Task 4.) Converting keywords to commands. We built two stacks, a keyword stack a
 Notes:
 Limitations: We hardcoded a case where if there is a case such as ' ... done\nfalse', the newline is converted to a sequence command. There may be more cases
 		in which newlines are converted to sequences which we did not account for.
+
+Task 5.) Adding execution. Each type of command had it's own function to run that command. The commands essentially boil down to running simple commands, which are done
+		by forking the current process and using execvp to execute commands.
+
+Task 6.) Added profiling mode. For the first column, we used CLOCK_REALTIME since that was what was required. For the second and third columns, we used CLOCK_MONOTONIC, since
+	 that clock is better for measuring elapsed time.
+
+
+Must the first column of the log output be in nondecreasing order? If not, give a counterexample.
+The first column does not need to be in nondecreasing order. This is because CLOCK_REALTIME can be changed, e.g if the admin changes the clock or through daylight savings.
+
+
+Can the second column be less than the sum of the third and fourth columns, other than due to rounding errors? If so, explain why.
+The sum of the third and fourth columns can be greater than the second column if there is multithreading. Multithreading 
+
+Can the second, third, or fourth column ever be negative? Briefly explain.
+Those columns cannot, since the CLOCK_MONOTIC that we used in clock_gettime was calculated by taking differences, and the times in get_rusage cannot be non-negative.
+
+How did you test your shell to make sure that log lines are not interleaved? If you used test scripts, submit a copy of the scripts as part of your submission tarball.
+Interleaving only occurs when there is parrellization, which this lab did not have.
+
