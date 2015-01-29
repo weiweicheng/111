@@ -221,16 +221,20 @@ void execute_simple(command_t c, int profiling)
 {
     int status;
     pid_t pid = fork();
-  struct timespec func_start, func_end, realClk;
+
+    struct timespec func_start, func_end, realClk;
+    struct rusage usage;
+    struct timeval sys_start, sys_end, user_start, user_end;
+    
+  if(profiling != -1) {
   clock_gettime(CLOCK_MONOTONIC, &func_start);
 
-  struct rusage usage;
-  struct timeval sys_start, sys_end, user_start, user_end;
 
   getrusage(RUSAGE_CHILDREN, &usage);
   sys_start = usage.ru_stime;
   user_start = usage.ru_utime;
 
+  }
   switch(pid)
   {
   case -1:
@@ -250,6 +254,7 @@ void execute_simple(command_t c, int profiling)
     break;
   }
 
+  if (profiling !=-1) {
   getrusage(RUSAGE_CHILDREN, &usage);
   sys_end = usage.ru_stime;
   user_end = usage.ru_utime;
@@ -283,6 +288,8 @@ void execute_simple(command_t c, int profiling)
   }
 
   dprintf(profiling, "\n");
+
+  }
 }
 
 
