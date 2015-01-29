@@ -125,7 +125,7 @@ main (int argc, char **argv)
     double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/MILLION;
     double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
 
-    dprintf(profiling, "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, user_time, system_time );
+    dprintf(profiling, "%lf %lf %lf %lf ", timefinished, accum, user_time, system_time );
     dprintf(profiling, "[%d]", getpid());
     dprintf(profiling, "\n");
 

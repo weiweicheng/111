@@ -153,33 +153,94 @@ void execute_pipe (command_t c, int profiling)
 
   pid_1 = fork();
 
+  struct timespec func_start, func_end, realClk;
+  struct rusage usage;
+  struct timeval sys_start, sys_end, user_start, user_end;
+
+  if(profiling != -1) {
+    clock_gettime(CLOCK_MONOTONIC, &func_start);
+
+
+    getrusage(RUSAGE_CHILDREN, &usage);
+    sys_start = usage.ru_stime;
+    user_start = usage.ru_utime;
+
+  }
+
   switch(pid_1) {
     case 0:
       close(fd[0]);
       if(dup2(fd[1], 1) < 0)
         error(1, errno, "There was an error redirecting STDOUT.\n");
       execute_command(c->u.command[0], profiling);
+      if (profiling !=-1) {
+        getrusage(RUSAGE_CHILDREN, &usage);
+        sys_end = usage.ru_stime;
+        user_end = usage.ru_utime;
+
+        clock_gettime(CLOCK_MONOTONIC, &func_end);
+        clock_gettime(CLOCK_REALTIME, &realClk);
+        double accum = ( func_end.tv_sec - func_start.tv_sec )
+        + ( func_end.tv_nsec - func_start.tv_nsec )
+        / BILLION;
+        double timefinished = (realClk.tv_sec + realClk.tv_nsec/BILLION);
+        double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/MILLION;
+        double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
+
+        dprintf(profiling, "%lf %lf %lf %lf ", timefinished, accum, user_time, system_time );
+        dprintf(profiling, "[%d]", getpid());
+        dprintf(profiling, "\n");
+
+      }
       _exit(c->u.command[0]->status);
     case -1:
       error(1, 0, "Could not fork.\n");
     default:
-    	printf("proud papa\n");
       break;
   }
 
+
+
   pid_2 = fork();
 
+  if(profiling != -1) {
+    clock_gettime(CLOCK_MONOTONIC, &func_start);
+
+
+    getrusage(RUSAGE_CHILDREN, &usage);
+    sys_start = usage.ru_stime;
+    user_start = usage.ru_utime;
+
+  }
   switch(pid_2) {
     case 0:   // pid_1 is a child process
       close(fd[1]);
       if(dup2(fd[0], 0) < 0)
         error(1, errno, "There was an error redirecting STDIN.\n");
       execute_command(c->u.command[1], profiling);
+      if (profiling !=-1) {
+        getrusage(RUSAGE_CHILDREN, &usage);
+        sys_end = usage.ru_stime;
+        user_end = usage.ru_utime;
+
+        clock_gettime(CLOCK_MONOTONIC, &func_end);
+        clock_gettime(CLOCK_REALTIME, &realClk);
+        double accum = ( func_end.tv_sec - func_start.tv_sec )
+        + ( func_end.tv_nsec - func_start.tv_nsec )
+        / BILLION;
+        double timefinished = (realClk.tv_sec + realClk.tv_nsec/BILLION);
+        double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/MILLION;
+        double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
+
+        dprintf(profiling, "%lf %lf %lf %lf ", timefinished, accum, user_time, system_time );
+        dprintf(profiling, "[%d]", getpid());
+        dprintf(profiling, "\n");
+
+      }
       _exit(c->u.command[1]->status);
     case -1:
       error(1, 0, "Could not fork.\n");
     default:
-    	printf("proud mama\n");
       break;    /// does parent process not do anything? maybe this is what goes to wait
   }
 
@@ -201,19 +262,7 @@ void execute_pipe (command_t c, int profiling)
 
 void execute_subshell(command_t c, int profiling) {
   setup_io(c);
-
-  // struct timespec start, stop, elapsed;
-  // double t, elapsed_t;
-
-  // clock_gettime(CLOCK_MONOTONIC, &start);
-  // execute_command(c->u.command[0], profiling);
-  // clock_gettime(CLOCK_MONOTONIC, &stop);
-  // clock_gettime(CLOCK_REALTIME, &elapsed);
-
-  // t = (stop.tv_sec - start.tv_sec) + (stop.tv_nsec - start.tv_nsec)/BILLION;
-  // elapsed_t = elapsed.tv_sec + elapsed.tv_nsec/BILLION;
-  // printf(" %lf %lf\n", elapsed_t, t);
-
+  execute_command(c->u.command[0], profiling);
   c->status = c->u.command[0]->status;
 }
 
@@ -225,7 +274,7 @@ void execute_simple(command_t c, int profiling)
     struct timespec func_start, func_end, realClk;
     struct rusage usage;
     struct timeval sys_start, sys_end, user_start, user_end;
-    
+
   if(profiling != -1) {
   clock_gettime(CLOCK_MONOTONIC, &func_start);
 
@@ -268,7 +317,7 @@ void execute_simple(command_t c, int profiling)
   double system_time = (sys_end.tv_sec-sys_start.tv_sec) + (sys_end.tv_usec-sys_start.tv_usec)/MILLION;
   double user_time = (user_end.tv_sec-user_start.tv_sec) + (user_end.tv_usec-user_start.tv_usec)/MILLION;
 
-  dprintf(profiling, "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, user_time, system_time );
+  dprintf(profiling, "%lf %lf %lf %lf ", timefinished, accum, user_time, system_time );
   dprintf(profiling, "%s ", c->u.word[0]);
 
   int i = 1;
