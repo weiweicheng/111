@@ -202,17 +202,17 @@ void execute_pipe (command_t c, int profiling)
 void execute_subshell(command_t c, int profiling) {
   setup_io(c);
 
-  struct timespec start, stop, elapsed;
-  double t, elapsed_t;
+  // struct timespec start, stop, elapsed;
+  // double t, elapsed_t;
 
-  clock_gettime(CLOCK_MONOTONIC, &start);
-  execute_command(c->u.command[0], profiling);
-  clock_gettime(CLOCK_MONOTONIC, &stop);
-  clock_gettime(CLOCK_REALTIME, &elapsed);
+  // clock_gettime(CLOCK_MONOTONIC, &start);
+  // execute_command(c->u.command[0], profiling);
+  // clock_gettime(CLOCK_MONOTONIC, &stop);
+  // clock_gettime(CLOCK_REALTIME, &elapsed);
 
-  t = (stop.tv_sec - start.tv_sec) + (stop.tv_nsec - start.tv_nsec)/BILLION;
-  elapsed_t = elapsed.tv_sec + elapsed.tv_nsec/BILLION;
-  printf(" %lf %lf\n", elapsed_t, t);
+  // t = (stop.tv_sec - start.tv_sec) + (stop.tv_nsec - start.tv_nsec)/BILLION;
+  // elapsed_t = elapsed.tv_sec + elapsed.tv_nsec/BILLION;
+  // printf(" %lf %lf\n", elapsed_t, t);
 
   c->status = c->u.command[0]->status;
 }
@@ -265,11 +265,23 @@ void execute_simple(command_t c, int profiling)
 
   dprintf(profiling, "Time: %lf Elapsed:%lf System:%lf User:%lf ", timefinished, accum, user_time, system_time );
   dprintf(profiling, "%s ", c->u.word[0]);
+
   int i = 1;
   while(c->u.word[i]) {
   	dprintf(profiling, "%s ", c->u.word[i]);
   	i++;
   }
+
+  if(c->input) {
+  	dprintf(profiling, "< ");
+  	dprintf(profiling, "%s ", c->input);
+  }
+
+  if(c->output) {
+  	dprintf(profiling, "> ");
+  	dprintf(profiling, "%s ", c->output);
+  }
+
   dprintf(profiling, "\n");
 }
 
