@@ -153,6 +153,23 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 		end_request(req,0);
 	}
 
+	osp_spin_lock(&d->mutex);
+
+	int req_type = rq_data_dir(req);
+	size_t num_bytes = req->current_nr_sectors * SECTOR_SIZE;
+	size_t sector_offset = req->sector * SECTOR_SIZE;
+
+	if(req_type == WRITE) {
+		memcpy(d->data + sector_offset, req->buffer, num_bytes);
+	}
+	else if(req_type == READ) {
+		memcpy(req->buffer, d->data + sector_offset, num_bytes);
+	}
+	else
+		; // make an error here
+
+	osp_spin_unlock(&d->mutex);
+
 	end_request(req,1);
 }
 
