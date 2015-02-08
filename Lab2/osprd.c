@@ -44,6 +44,21 @@ MODULE_AUTHOR("Skeletor");
 static int nsectors = 32;
 module_param(nsectors, int, 0);
 
+struct pid_list{
+	pid_t pid;
+	struct pid_list* next;
+} pid_list;
+
+typedef struct pid_list* pid_list_t;
+
+pid_list_t create_node(pid_t pid)
+{
+    pid_list_t new_node = kmalloc(sizeof(pid_list), GFP_ATOMIC);
+    new_node->pid = pid;
+    new_node->next = NULL;
+    return new_node;
+}
+
 
 /* The internal representation of our device. */
 typedef struct osprd_info {
@@ -64,6 +79,12 @@ typedef struct osprd_info {
 
 	/* HINT: You may want to add additional fields to help
 	         in detecting deadlock. */
+
+	pid_t write_pid;
+	pid_list_t read_pid_list;
+
+	int num_write_locks;
+	int num_read_locks;
 
 	// The following elements are used internally; you don't need
 	// to understand them.
@@ -231,8 +252,79 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// be protected by a spinlock; which ones?)
 
 		// Your code here (instead of the next two lines).
-		eprintk("Attempting to acquire\n");
-		r = -ENOTTY;
+		osp_spin_lock(&d->mutex);
+
+		if (current->pid == d->write_pid) {
+            osp_spin_unlock(&d->mutex);
+            return -EDEADLK;
+        }
+
+        if(current->pid == d->write_pid) {
+			osp_spin_unlock(&d->mutex);
+			return -EDEADLK;
+		}
+		unsigned local_ticket = d->ticket_head;
+		d->ticket_head++;
+
+		if(filp_writable) {
+			pid_list_t prev = NULL;
+			pid_list_t curr = d->read_pid_list;
+			while(curr != NULL) {
+				if(curr->pid == current->pid) {
+					osp_spin_unlock(&d->mutex);
+					return -EDEADLK;
+				} else {
+					prev = curr;
+					curr = curr->next;
+				}
+			}	
+			while (d->num_write_locks != 0 || d->num_read_locks != 0 || local_ticket != d->ticket_tail){
+				int wait_result = wait_event_interruptible(d->blockq, 1);
+				osp_spin_unlock(&d->mutex);
+				if(wait_result == -ERESTARTSYS)
+					return -ERESTARTSYS;
+				schedule();
+				osp_spin_lock(&d->mutex);
+			}
+
+			filp->f_flags |= F_OSPRD_LOCKED;
+			d->num_write_locks++;
+			d->write_pid = current->pid;
+		}
+		else {
+		while( d->num_write_locks != 0 || local_ticket != d->ticket_tail) {
+			int wait_result = wait_event_interruptible(d->blockq,1);
+			osp_spin_unlock(&d->mutex);
+			if(wait_result == -ERESTARTSYS)
+				return -ERESTARTSYS;
+			schedule();
+			osp_spin_lock(&d->mutex);
+		}
+		filp->f_flags |= F_OSPRD_LOCKED;
+		d->num_read_locks++;
+		
+		pid_list_t prev = NULL;
+		pid_list_t curr = d->read_pid_list;
+		while(curr != NULL)
+		{
+			prev = curr;
+			curr = curr->next;
+		}
+		if(prev == NULL)
+		{
+			d->read_pid_list = kmalloc(sizeof(pid_list_t), GFP_ATOMIC);
+			d->read_pid_list->pid = current->pid;
+			d->read_pid_list->next = NULL;
+		}
+		else
+		{
+			prev->next = kmalloc(sizeof(pid_list_t), GFP_ATOMIC);
+			prev->next->pid = current->pid;
+			prev->next->next = NULL;
+		}
+	}
+	d->ticket_tail++;
+	osp_spin_unlock(&d->mutex);
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
 
