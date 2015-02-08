@@ -145,7 +145,7 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 		memcpy(req->buffer, d->data + sector_offset, num_bytes);
 	}
 	else
-		; // some error about neither read nor write
+		; // make an error here
 
 	osp_spin_unlock(&d->mutex);
 
