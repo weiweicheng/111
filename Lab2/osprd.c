@@ -201,45 +201,33 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 		// Your code here.
 
 		osp_spin_lock(&d->mutex);
-		if((filp->f_flags & F_OSPRD_LOCKED) == 0)
-	{
-		osp_spin_unlock(&d->mutex);
-		return 0;
-	}
-	else
-	{
-		if(filp_writable != 0)
-		{
-			d->write_locked = 0;
-			d->write_lock_pid = -1;		
-		}
-		else
-		{
-			d->num_read_locks--;
-			pid_list_t prev = d->read_pid_list;
-			pid_list_t curr = d->read_pid_list;
-			while( curr != NULL)
-			{
-				if(curr->pid == current->pid)
-				{
-					if (prev == NULL)
-						d->read_pid_list = curr->next;
-					else
-						prev->next = curr->next;
-						break;
-				}
-				else
-				{
-					prev = curr;
-					curr = curr->next;
-				}
-
-
+		if (filp->f_flags & F_OSPRD_LOCKED) {
+			if (filp_writable) {
+				d->write_locked = 0;
+				d->write_lock_pid = -1;
 			}
+			else {
+				d->num_read_locks--;
+				pid_list_t prev = d->read_pid_list;
+				pid_list_t curr = d->read_pid_list;
+				while( curr != NULL){
+					if(curr->pid == current->pid) {
+						if (prev == NULL)
+							d->read_pid_list = curr->next;
+						else
+							prev->next = curr->next;
+						break;
+					} else {
+						prev = curr;
+						curr = curr->next;
+					}
+				}
+			}
+			wake_up_all(&d->blockq);
 		}
-		wake_up_all(&d->blockq);
-	}
-	osp_spin_unlock(&d->mutex);
+
+		filp->f_flags ^= F_OSPRD_LOCKED;
+		osp_spin_unlock(&d->mutex);
 		
 
 		// This line avoids compiler warnings; you may remove it.
