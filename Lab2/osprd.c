@@ -203,24 +203,24 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 		osp_spin_lock(&d->mutex);
 		if (filp->f_flags & F_OSPRD_LOCKED) {
 			if (filp_writable) {
-				d->write_locked = 0;
 				d->write_lock_pid = -1;
+				d->write_locked = 0;
 			}
 			else {
 				d->num_read_locks--;
-				pid_list_t prev = d->read_pid_list;
-				pid_list_t curr = d->read_pid_list;
-				while( curr != NULL){
-					if(curr->pid == current->pid) {
-						if (prev == NULL)
-							d->read_pid_list = curr->next;
+				pid_list_t prev_iter = d->read_pid_list;
+				pid_list_t iter = d->read_pid_list;
+				while(iter){
+					if(current->pid == iter->pid) {
+						if (!prev_iter)
+							d->read_pid_list = iter->next;
 						else
-							prev->next = curr->next;
+							prev_iter->next = iter->next;
 						break;
-					} else {
-						prev = curr;
-						curr = curr->next;
 					}
+
+					prev_iter = iter;
+					iter = iter->next;
 				}
 			}
 			wake_up_all(&d->blockq);
