@@ -299,7 +299,79 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// be protected by a spinlock; which ones?)
 
 		// Your code here (instead of the next two lines).
-		r = -ENOTTY;
+
+		//Check for deadlocks. If a lock tries to lock itself twice, there is a deadlock.
+
+		if(current->pid == d->write_lock_pid) {
+			eprintk("Deadlock.\n");
+			return -EDEADLK;
+		}
+
+		pid_list_t iter = d->read_pid_list;
+		while(iter) {
+			if(iter->pid == current->pid) {
+				eprintk("Deadlock.\n");
+				return -EDEADLK;
+			} 
+			iter = iter->next;
+		}	
+
+		osp_spin_lock(&d->mutex);
+
+		unsigned local_ticket = d->ticket_head;
+		d->ticket_head++;
+
+		if(filp_writable) {
+			while (d->write_locked != 0 || d->num_read_locks != 0 || local_ticket != d->ticket_tail) {
+				int result = wait_event_interruptible(d->blockq, 1);
+				osp_spin_unlock(&d->mutex);
+				if(result == -ERESTARTSYS){
+					if (local_ticket == d->ticket_tail)
+						d->ticket_tail++;
+					else
+						d->ticket_head--;
+					return -ERESTARTSYS;
+				}
+			schedule();
+			osp_spin_lock(&d->mutex);
+			}
+
+			filp->f_flags |= F_OSPRD_LOCKED;
+			d->write_locked = 1;
+			d->write_lock_pid = current->pid;
+		} else {
+			while( d->write_locked != 0 || local_ticket != d->ticket_tail) {
+				int result = wait_event_interruptible(d->blockq,1);
+				osp_spin_unlock(&d->mutex);
+				if(result == -ERESTARTSYS) {
+					if (local_ticket == d->ticket_tail)
+						d->ticket_tail++;
+					else
+						d->ticket_head--;
+					return -ERESTARTSYS;
+				}
+				schedule();
+				osp_spin_lock(&d->mutex);
+			}
+			filp->f_flags |= F_OSPRD_LOCKED;
+			d->num_read_locks++;
+		
+			//Add to list of read locks
+			pid_list_t prev_iter = NULL;
+			pid_list_t iter = d->read_pid_list;
+			if(iter == NULL) {
+				d->read_pid_list = create_node(current->pid);
+			} else {
+				while(iter) {
+					prev_iter = iter;
+					iter = iter->next;
+				}
+				prev_iter->next = create_node(current->pid);
+			}
+		}
+
+		d->ticket_tail++;
+		osp_spin_unlock(&d->mutex);
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
 
