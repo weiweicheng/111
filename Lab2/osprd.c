@@ -321,42 +321,40 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		unsigned local_ticket = d->ticket_head;
 		d->ticket_head++;
 
+		osp_spin_unlock(&d->mutex);
+
 		if(filp_writable) {
-			while (d->write_locked != 0 || d->num_read_locks != 0 || local_ticket != d->ticket_tail) {
-				int result = wait_event_interruptible(d->blockq, 1);
+			int result = wait_event_interruptible(d->blockq, local_ticket == d->ticket_tail && d->write_locked == 0 && d->num_read_locks == 0);
+			if(result == -ERESTARTSYS){
+				osp_spin_lock(&d->mutex);
+				if (local_ticket == d->ticket_tail)
+					d->ticket_tail++;
+				else
+					d->ticket_head--;
 				osp_spin_unlock(&d->mutex);
-				if(result == -ERESTARTSYS){
-					if (local_ticket == d->ticket_tail)
-						d->ticket_tail++;
-					else
-						d->ticket_head--;
-					return -ERESTARTSYS;
-				}
-			schedule();
-			osp_spin_lock(&d->mutex);
+				return -ERESTARTSYS;
 			}
 
-			filp->f_flags |= F_OSPRD_LOCKED;
+			osp_spin_lock(&d->mutex);			
+
 			d->write_locked = 1;
 			d->write_lock_pid = current->pid;
 		} else {
-			while( d->write_locked != 0 || local_ticket != d->ticket_tail) {
-				int result = wait_event_interruptible(d->blockq,1);
-				osp_spin_unlock(&d->mutex);
-				if(result == -ERESTARTSYS) {
-					if (local_ticket == d->ticket_tail)
-						d->ticket_tail++;
-					else
-						d->ticket_head--;
-					return -ERESTARTSYS;
-				}
-				schedule();
+			int result = wait_event_interruptible(d->blockq, local_ticket == d->ticket_tail && d->write_locked == 0);
+			if(result == -ERESTARTSYS) {
 				osp_spin_lock(&d->mutex);
+				if (local_ticket == d->ticket_tail)
+					d->ticket_tail++;
+				else
+					d->ticket_head--;
+				osp_spin_unlock(&d->mutex);
+				return -ERESTARTSYS;
 			}
-			filp->f_flags |= F_OSPRD_LOCKED;
+			osp_spin_lock(&d->mutex);
+
 			d->num_read_locks++;
 		
-			//Add to list of read locks
+			//Add to list of read
 			pid_list_t prev_iter = NULL;
 			pid_list_t iter = d->read_pid_list;
 			if(iter == NULL) {
@@ -371,6 +369,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		}
 
 		d->ticket_tail++;
+		filp->f_flags |= F_OSPRD_LOCKED;
 		osp_spin_unlock(&d->mutex);
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
