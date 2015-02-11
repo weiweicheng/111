@@ -127,6 +127,10 @@ static void for_each_open_file(struct task_struct *task,
  */
 static void osprd_process_request(osprd_info_t *d, struct request *req)
 {
+
+	int req_type;
+	size_t num_bytes, sector_offset;
+	
 	if (!blk_fs_request(req)) {
 		end_request(req, 0);
 		return;
@@ -141,6 +145,12 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 	// 'req->buffer' members, and the rq_data_dir() function.
 
 	// Your code here.
+
+
+	req_type = rq_data_dir(req);
+	num_bytes = req->current_nr_sectors * SECTOR_SIZE;
+	sector_offset = req->sector * SECTOR_SIZE;
+
 	if (req->current_nr_sectors > nsectors)
 	{
 		eprintk("Too many sectors requested\n");
@@ -153,10 +163,6 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 	}
 
 	osp_spin_lock(&d->mutex);
-
-	int req_type = rq_data_dir(req);
-	size_t num_bytes = req->current_nr_sectors * SECTOR_SIZE;
-	size_t sector_offset = req->sector * SECTOR_SIZE;
 
 	if(req_type == WRITE) {
 		memcpy(d->data + sector_offset, req->buffer, num_bytes);
@@ -199,6 +205,8 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 
 		// Your code here.
 
+		pid_list_t prev_iter, iter;
+
 		osp_spin_lock(&d->mutex);
 		if (filp->f_flags & F_OSPRD_LOCKED) {
 			if (filp_writable) {
@@ -207,8 +215,8 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 			}
 			else {
 				d->num_read_locks--;
-				pid_list_t prev_iter = d->read_pid_list;
-				pid_list_t iter = d->read_pid_list;
+				prev_iter = d->read_pid_list;
+				iter = d->read_pid_list;
 				while(iter){
 					if(current->pid == iter->pid) {
 						if (!prev_iter)
@@ -301,12 +309,15 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 		//Check for deadlocks. If a lock tries to lock itself twice, there is a deadlock.
 
+		unsigned local_ticket;
+		pid_list_t iter, prev_iter;
+
 		if(current->pid == d->write_lock_pid) {
 			eprintk("Deadlock.\n");
 			return -EDEADLK;
 		}
 
-		pid_list_t iter = d->read_pid_list;
+		iter = d->read_pid_list;
 		while(iter) {
 			if(iter->pid == current->pid) {
 				eprintk("Deadlock.\n");
@@ -317,7 +328,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 		osp_spin_lock(&d->mutex);
 
-		unsigned local_ticket = d->ticket_head;
+		local_ticket = d->ticket_head;
 		d->ticket_head++;
 
 		osp_spin_unlock(&d->mutex);
@@ -354,8 +365,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 			d->num_read_locks++;
 		
 			//Add to list of read
-			pid_list_t prev_iter = NULL;
-			pid_list_t iter = d->read_pid_list;
+			prev_iter = NULL;
+			iter = d->read_pid_list;
 			if(iter == NULL) {
 				d->read_pid_list = create_node(current->pid);
 			} else {
@@ -381,13 +392,15 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// Otherwise, if we can grant the lock request, return 0.
 
 		// Your code here (instead of the next two lines).
+		unsigned local_ticket;
+		pid_list_t iter, prev_iter;
 
 		if(current->pid == d->write_lock_pid) {
 			eprintk("Busy.\n");
 			return -EBUSY;
 		}
 
-		pid_list_t iter = d->read_pid_list;
+		iter = d->read_pid_list;
 		while(iter) {
 			if(iter->pid == current->pid) {
 				eprintk("Busy.\n");
@@ -398,7 +411,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 		osp_spin_lock(&d->mutex);
 
-		unsigned local_ticket = d->ticket_head;
+		local_ticket = d->ticket_head;
 		d->ticket_head++;
 
 		osp_spin_unlock(&d->mutex);
@@ -435,8 +448,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 			d->num_read_locks++;
 		
 			//Add to list of read
-			pid_list_t prev_iter = NULL;
-			pid_list_t iter = d->read_pid_list;
+			prev_iter = NULL;
+			iter = d->read_pid_list;
 			if(iter == NULL) {
 				d->read_pid_list = create_node(current->pid);
 			} else {
@@ -465,6 +478,9 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// Your code here (instead of the next line).
 
 		// Check if disk is locked
+
+		pid_list_t prev_iter, iter;
+
 		if((filp->f_flags && F_OSPRD_LOCKED) == 0)
 			return -EINVAL;
 
@@ -478,8 +494,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 		} else {	// readable 
 			d->num_read_locks--;
-			pid_list_t prev_iter = NULL;
-			pid_list_t iter = d->read_pid_list;
+			prev_iter = NULL;
+			iter = d->read_pid_list;
 			while(iter) {
 				if(!iter->next) {
 					break;
