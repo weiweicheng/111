@@ -59,7 +59,6 @@ pid_list_t create_node(pid_t pid)
     return new_node;
 }
 
-
 /* The internal representation of our device. */
 typedef struct osprd_info {
 	uint8_t *data;                  // The data array. Its size is
@@ -382,8 +381,77 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// Otherwise, if we can grant the lock request, return 0.
 
 		// Your code here (instead of the next two lines).
-		eprintk("Attempting to try acquire\n");
-		r = -ENOTTY;
+
+		if(current->pid == d->write_lock_pid) {
+			eprintk("Busy.\n");
+			return -EBUSY;
+		}
+
+		pid_list_t iter = d->read_pid_list;
+		while(iter) {
+			if(iter->pid == current->pid) {
+				eprintk("Busy.\n");
+				return -EBUSY;
+			} 
+			iter = iter->next;
+		}	
+
+		osp_spin_lock(&d->mutex);
+
+		unsigned local_ticket = d->ticket_head;
+		d->ticket_head++;
+
+		osp_spin_unlock(&d->mutex);
+
+		if(filp_writable) {
+			int result = local_ticket == d->ticket_tail && d->write_locked == 0 && d->num_read_locks == 0;
+			if(result == 0){
+				osp_spin_lock(&d->mutex);
+				if (local_ticket == d->ticket_tail)
+					d->ticket_tail++;
+				else
+					d->ticket_head--;
+				osp_spin_unlock(&d->mutex);
+				return -EBUSY;
+			}
+
+			osp_spin_lock(&d->mutex);			
+
+			d->write_locked = 1;
+			d->write_lock_pid = current->pid;
+		} else {
+			int result = local_ticket == d->ticket_tail && d->write_locked == 0;
+			if(result == 0) {
+				osp_spin_lock(&d->mutex);
+				if (local_ticket == d->ticket_tail)
+					d->ticket_tail++;
+				else
+					d->ticket_head--;
+				osp_spin_unlock(&d->mutex);
+				return -EBUSY;
+			}
+			osp_spin_lock(&d->mutex);
+
+			d->num_read_locks++;
+		
+			//Add to list of read
+			pid_list_t prev_iter = NULL;
+			pid_list_t iter = d->read_pid_list;
+			if(iter == NULL) {
+				d->read_pid_list = create_node(current->pid);
+			} else {
+				while(iter) {
+					prev_iter = iter;
+					iter = iter->next;
+				}
+				prev_iter->next = create_node(current->pid);
+			}
+		}
+
+		d->ticket_tail++;
+		filp->f_flags |= F_OSPRD_LOCKED;
+		osp_spin_unlock(&d->mutex);
+
 
 	} else if (cmd == OSPRDIOCRELEASE) {
 
@@ -395,7 +463,43 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// you need, and return 0.
 
 		// Your code here (instead of the next line).
-		r = -ENOTTY;
+
+		// Check if disk is locked
+		if((filp->f_flags && F_OSPRD_LOCKED) == 0)
+			return -EINVAL;
+
+		osp_spin_lock(&d->mutex);
+
+		// for writable
+
+		if(filp_writable) {
+			d->write_locked = 0;
+			d->write_lock_pid = -1;
+
+		} else {	// readable 
+			d->num_read_locks--;
+			pid_list_t prev_iter = NULL;
+			pid_list_t iter = d->read_pid_list;
+			while(iter) {
+				if(!iter->next) {
+					break;
+				} else if(iter->pid == current->pid) {
+					if(prev_iter)
+						prev_iter->next = iter->next;
+					else
+						d->read_pid_list = iter->next;
+					kfree(iter);
+					break;
+				} else {
+					prev_iter = iter;
+					iter = iter->next;
+				}
+			}
+		}
+
+		filp->f_flags ^= F_OSPRD_LOCKED;
+		osp_spin_unlock(&d->mutex);
+		wake_up_all(&d->blockq);
 
 	} else
 		r = -ENOTTY; /* unknown command */
