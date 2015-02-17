@@ -6,4 +6,7 @@
 #define OSPRDIOCTRYACQUIRE	43
 #define OSPRDIOCRELEASE		44
 
+#define goodpass 45
+#define badpass 46
+
 #endif

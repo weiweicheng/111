@@ -14,6 +14,11 @@
 #include <linux/wait.h>
 #include <linux/file.h>
 
+#include <linux/fs.h>
+#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <linux/buffer_head.h>
+
 #include "spinlock.h"
 #include "osprd.h"
 
@@ -29,7 +34,7 @@
  * KERN_EMERG so that you are sure to see the messages.  By default, the
  * kernel does not print all messages to the console.  Levels like KERN_ALERT
  * and KERN_EMERG will make sure that you will see messages.) */
-#define eprintk(format, ...) printk(KERN_NOTICE format, ## __VA_ARGS__)
+#define eprintk(format, ...) printk(KERN_EMERG format, ## __VA_ARGS__)
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("CS 111 RAM Disk");
@@ -50,6 +55,7 @@ struct pid_list{
 } pid_list;
 
 typedef struct pid_list* pid_list_t;
+int pass = 0;
 
 pid_list_t create_node(pid_t pid)
 {
@@ -262,6 +268,17 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 	// is file open for writing?
 	int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
+
+	if ( cmd==goodpass) {
+		//eprintk("Pass value: 1\n");
+		pass=1;
+		return 0;
+	} else if (cmd == badpass) {
+		//eprintk("Pass value: 0\n");
+		pass = 0;
+		return 0;
+	}
+
 
 	// This line avoids compiler warnings; you may remove it.
 	(void) filp_writable, (void) d;
@@ -557,7 +574,73 @@ static void osprd_process_request_queue(request_queue_t *q)
 // the Linux block device interface doesn't let a block device find out
 // which file has been closed.  We need this information.
 
-static struct file_operations osprd_blk_fops;
+int BUFFER_SIZE=64;
+
+int encrypt_data(char *data, size_t len)
+{
+    int i;
+    for(i=0; i < len; i++)
+        data[i] ^= 5;
+    return 0;
+}
+
+int decrypt_data(char *data, size_t len)
+{
+    int i;
+    for(i=0; i < len; i++)
+        data[i] ^= 5;
+    return 0;
+}
+
+static ssize_t read_encrypted(struct file *filp, char *buf, size_t count, loff_t *f_pos) { 
+
+	 size_t ret = -1;
+     mm_segment_t oldfs;
+     char *data = kmalloc(sizeof(char)*count, GFP_KERNEL);
+
+
+    oldfs = get_fs();      /* Read comments in include/asm-x86/uaccess_64.h */
+    set_fs (KERNEL_DS);
+	ret = do_sync_read(filp, data, count, f_pos);
+	set_fs(oldfs);
+	if(pass==1)
+		decrypt_data(data, count);
+	if(copy_to_user(buf, data, count) != 0)
+		return ret;
+
+	kfree(data);
+	return ret;
+}
+
+static ssize_t write_encrypted( struct file *filp, const char __user *buf,
+                  size_t count, loff_t *f_pos) {
+
+   	size_t ret = -1;
+   	if(pass == 1) {
+	   	//eprintk("Running in here now\n");
+	    mm_segment_t oldfs;
+	    char *data = kmalloc(sizeof(char)*count, GFP_KERNEL);
+
+	    if(copy_from_user(data, buf, count) != 0)
+	    	return ret;
+	    encrypt_data(data, count);
+
+	    oldfs = get_fs();      /* Read comments in include/asm-x86/uaccess_64.h */
+	    set_fs (KERNEL_DS);
+	    ret = do_sync_write(filp, data, count, f_pos);
+	    set_fs(oldfs);
+	    
+	    kfree(data);
+	}
+    return ret;
+}
+
+
+static struct file_operations osprd_blk_fops = {
+	.owner = THIS_MODULE,
+	.write= write_encrypted,
+	.read = read_encrypted
+};
 static int (*blkdev_release)(struct inode *, struct file *);
 
 static int _osprd_release(struct inode *inode, struct file *filp)
@@ -573,6 +656,9 @@ static int _osprd_open(struct inode *inode, struct file *filp)
 		memcpy(&osprd_blk_fops, filp->f_op, sizeof(osprd_blk_fops));
 		blkdev_release = osprd_blk_fops.release;
 		osprd_blk_fops.release = _osprd_release;
+		//Added in
+		osprd_blk_fops.write = write_encrypted;
+		osprd_blk_fops.read = read_encrypted;
 	}
 	filp->f_op = &osprd_blk_fops;
 	return osprd_open(inode, filp);

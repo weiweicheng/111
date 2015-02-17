@@ -136,6 +136,8 @@ int main(int argc, char *argv[])
 	double delay = 0;
 	double lock_delay = 0;
 	const char *devname = "/dev/osprda";
+	int pass = 0;
+	char* password = "password123";
 
  flag:
 	// Detect a read/write option
@@ -150,6 +152,21 @@ int main(int argc, char *argv[])
 		argv++, argc--;
 		if (argc >= 2 && parse_ssize(argv[1], &size))
 			argv++, argc--;
+		goto flag;
+	}
+
+	//Detect password
+	if(argc >= 2 && strcmp(argv[1], "-p") == 0) {
+		if (argc < 2)
+			usage(1);
+		if(strcmp(argv[2], password) == 0){
+			//printf("True");
+			pass = 1;
+		} else {
+			//printf("False");
+			pass = 0;
+		}
+		argv += 2, argc -= 2;
 		goto flag;
 	}
 
@@ -212,6 +229,19 @@ int main(int argc, char *argv[])
 		perror("open");
 		exit(1);
 	}
+
+	if(pass == 1) {
+		if(ioctl(devfd, goodpass, 0) == -1) {
+				perror("ioctl goodpass");
+				exit(1);
+			}
+	} else {
+		if(ioctl(devfd, badpass, 0) == -1) {
+				perror("ioctl badpass");
+				exit(1);
+		}
+	}
+
 
 	// Lock, possibly after delay
 	if (dolock || dotrylock) {
