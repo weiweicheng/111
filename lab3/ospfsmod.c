@@ -428,6 +428,10 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	uint32_t f_pos = filp->f_pos;
 	int r = 0;		/* Error return value, if any */
 	int ok_so_far = 0;	/* Return value from 'filldir' */
+	int filetype;
+
+	uint32_t offset = 0;
+	uint32_t dir_size = dir_oi->oi_size;
 
 	// f_pos is an offset into the directory's data, plus two.
 	// The "plus two" is to account for "." and "..".
@@ -448,12 +452,16 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		ospfs_direntry_t *od;
 		ospfs_inode_t *entry_oi;
 
+
 		/* If at the end of the directory, set 'r' to 1 and exit
 		 * the loop.  For now we do this all the time.
 		 *
 		 * EXERCISE: Your code here */
-		r = 1;		/* Fix me! */
-		break;		/* Fix me! */
+		offset = (f_pos-2)*OSPFS_DIRENTRY_SIZE;
+		if (offset >= dir_size) { //We've reached the end of the directory
+			r = 1;
+			break;
+		}
 
 		/* Get a pointer to the next entry (od) in the directory.
 		 * The file system interprets the contents of a
@@ -476,6 +484,31 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 */
 
 		/* EXERCISE: Your code here */
+		od = ospfs_inode_data(dir_oi, offset);
+
+		 // Look up the appropriate inode.
+		entry_oi = ospfs_inode(od->od_ino);
+
+		if (entry_oi == NULL || od->od_ino == 0) {
+		 	f_pos++;
+		 	continue;
+		}
+
+		if(entry_oi->oi_ftype == OSPFS_FTYPE_REG)
+			filetype = DT_REG;
+		else if (entry_oi->oi_ftype == OSPFS_FTYPE_DIR)
+			filetype = DT_DIR;
+		else if (entry_oi->oi_ftype == OSPFS_FTYPE_SYMLINK)
+		 	filetype = DT_LNK;
+
+		 // We now have all of the information the callback needs, so run it
+		ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, filetype); 
+		if (ok_so_far < 0) {
+				r = 0;
+				break;
+			}
+		f_pos++;
+
 	}
 
 	// Save the file position and return!
@@ -846,11 +879,21 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 	// Change 'count' so we never read past the end of the file.
 	/* EXERCISE: Your code here */
 
+	uint32_t file_size = oi->oi_size;
+
+	if(*f_pos + count < *f_pos) //Overflow
+		return -EIO;
+	else if(file_size < *f_pos) //The position we're at is past the file
+		count = 0;
+	else if(file_size <= *f_pos + count) //The file size is less than how much we want to read
+		count = file_size - *f_pos;
+
 	// Copy the data to user block by block
 	while (amount < count && retval >= 0) {
 		uint32_t blockno = ospfs_inode_blockno(oi, *f_pos);
 		uint32_t n;
 		char *data;
+		size_t offset;
 
 		// ospfs_inode_blockno returns 0 on error
 		if (blockno == 0) {
@@ -865,8 +908,20 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 		// into user space.
 		// Use variable 'n' to track number of bytes moved.
 		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+
+		offset = *f_pos % OSPFS_BLKSIZE;
+
+		if (OSPFS_BLKSIZE - offset > count-amount)
+			n = count - amount;
+		else
+			n = OSPFS_BLKSIZE - offset;
+
+		retval = copy_to_user(buffer,data,n);
+
+		if (retval < 0) {
+			retval = -EFAULT;
+			goto done;
+		}
 
 		buffer += n;
 		amount += n;
