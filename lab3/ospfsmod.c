@@ -658,8 +658,11 @@ free_block(uint32_t blockno)
 static int32_t
 indir2_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	// not in a doubly indirect block?
+	if(b < OSPFS_NINDIRECT + OSPFS_NDIRECT)
+		return -1;
+	else
+		return 0;
 }
 
 
@@ -677,8 +680,17 @@ indir2_index(uint32_t b)
 static int32_t
 indir_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	// first see if it is contained in inode
+	if(b < OSPFS_NDIRECT)
+		return -1;
+
+	// see if in doubly indirect
+	else if(indir2_index(b) == -1) 
+		return 0;
+
+	else
+		return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT)/OSPFS_NINDIRECT;
+
 }
 
 
@@ -694,8 +706,12 @@ indir_index(uint32_t b)
 static int32_t
 direct_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	if(b < OSPFS_NDIRECT)
+		return b;
+	
+	// otherwise, will be in an indirect block
+	b -= OSPFS_NDIRECT;
+	return b % OSPFS_NINDIRECT;
 }
 
 
@@ -821,6 +837,10 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
 	        /* EXERCISE: Your code here */
+
+
+
+
 		return -EIO; // Replace this line
 	}
 	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
