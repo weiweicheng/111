@@ -735,12 +735,21 @@ add_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
+	int32_t index_indir, index_indir2, index_direct;
 
 	// keep track of allocations to free in case of -ENOSPC
 	uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+	
+	if(n == OSPFS_MAXFILEBLKS)
+		return -ENOSPC;
+
+	index_indir2 = indir2_index(n);
+	index_indir  = indir_index(n);
+	index_direct = direct_index(n);
+
+
 }
 
 
@@ -971,7 +980,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
 {
-	ospfs_inode_t *oi = ospfs_inode(filp->f_dentry->d_inode->i_ino);
+		ospfs_inode_t *oi = ospfs_inode(filp->f_dentry->d_inode->i_ino);
 	int retval = 0;
 	size_t amount = 0;
 
@@ -979,15 +988,30 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	// use struct file's f_flags field and the O_APPEND bit.
 	/* EXERCISE: Your code here */
 
+	if(filp->f_flags & O_APPEND)
+		*f_pos = oi->oi_size;
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
 	/* EXERCISE: Your code here */
+
+	if (oi->oi_size) {
+		if (*f_pos > oi->oi_size)
+			return 0;
+		if(*f_pos+count > oi->oi_size)
+			if((retval = change_size(oi, *f_pos+count)) != 0)
+				return retval;
+	}
+
+	
+
 
 	// Copy data block by block
 	while (amount < count && retval >= 0) {
 		uint32_t blockno = ospfs_inode_blockno(oi, *f_pos);
 		uint32_t n;
 		char *data;
+		uint32_t offset;
+		int32_t size_appended=0;
 
 		if (blockno == 0) {
 			retval = -EIO;
@@ -1001,9 +1025,19 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		// read user space.
 		// Keep track of the number of bytes moved in 'n'.
 		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+		offset = *f_pos % OSPFS_BLKSIZE;
+		n = OSPFS_BLKSIZE - offset;
+		if(n > count-amount)
+			n = count-amount;
 
+
+		if(copy_from_user(data + offset, buffer, n) > 0)
+			return -EFAULT;
+
+		if((size_appended = (*f_pos + n) - oi->oi_size) < 0)
+			size_appended = 0;
+
+		oi->oi_size += size_appended;
 		buffer += n;
 		amount += n;
 		*f_pos += n;
