@@ -788,8 +788,67 @@ remove_block(ospfs_inode_t *oi)
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
-	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+	if(n == 0)
+		return 0;
+	else if (n < 0)
+		return -EIO;
+	else
+		n--;	// to start index at 0
+
+	int32_t indir2 = indir2_index(n);
+	int32_t indir = indir_index(n);
+	int32_t direct = direct_index(n);
+
+	if(indir == -1) {
+		if(oi->oi_direct[direct] == 0)
+			return -EIO;
+		free_block(oi->oi_direct[direct]);
+		oi->oi_direct[direct] = 0;
+		oi->oi_size = n*OSPFS_BLKSIZE;
+		return 0;
+	}
+
+	uint32_t indir_block = 0;
+	uint32_t doubly_indir_block = 0;
+
+	uint32_t *indir_data = NULL;
+	uint32_t *doubly_indir_data = NULL;
+
+	if(indir2 == 0) {
+		if(oi->oi_indirect2 == 0)
+			return -EIO;
+
+		indir_block = oi->oi_indirect;
+		indir_data = osfps_block(indir_block);
+
+		doubly_indir_block = oi->oi_indirect2;
+		doubly_indir_data = osfps_block(doubly_indir_block);
+	} else {
+		indir_block = oi->oi_indirect;
+		indir_data = osfps_block(indir_block);
+	}
+
+	if(indir_data == NULL)
+		return -EIO;
+
+	free_block(indir_data[direct]);
+	indir_data[direct] = 0;
+	oi->oi_size = n * OSPFS_BLKSIZE;
+
+	if(direct == 0) {
+		free_block(indir_block);
+		if(indir2 == -1)
+			oi->oi_indirect = 0;
+		else
+			doubly_indir_data[indir] = 0;
+
+		if(indir == 0 && indir2 == 0) {
+			free_block(doubly_indir_block);
+			oi->oi_indirect2 = 0;
+		}
+	}
+
+	return 0;
 }
 
 
