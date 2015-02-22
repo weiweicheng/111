@@ -751,9 +751,14 @@ add_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
-	int32_t index_indir, index_indir2, index_direct;
+	int32_t index_direct, index_indir, index_indir2;
+	uint32_t direct_block, indir_block, indir2_block;
+	uint32_t *indir_data = NULL;
+	uint32_t *indir2_data = NULL;
+	int r;
 
 	// keep track of allocations to free in case of -ENOSPC
+	//0th index will be indirect block, and 1st index will be indirect block
 	uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
@@ -761,10 +766,106 @@ add_block(ospfs_inode_t *oi)
 	if(n == OSPFS_MAXFILEBLKS)
 		return -ENOSPC;
 
-	index_indir2 = indir2_index(n);
-	index_indir  = indir_index(n);
 	index_direct = direct_index(n);
+	index_indir  = indir_index(n);
+	index_indir2 = indir2_index(n);
 
+	//Block is one of the file's direct blocks
+	if(index_indir == -1) {
+		if( (direct_block = allocate_block()) == 0) {
+			r = -ENOSPC;
+			goto free_block;
+		}
+		memset(ospfs_block(direct_block), 0, OSPFS_BLKSIZE);
+		oi->oi_direct[index_direct]= direct_block;
+		oi->oi_size += OSPFS_BLKSIZE;
+		return 0;
+	}
+
+	//Needs a doubly indirect block
+	if(index_indir2 == 0)
+	{
+		if(oi->oi_indirect2 == 0) // and it is null, allocate it
+		{
+			if((allocated[1] = allocate_block()) == 0) {
+				r = -ENOSPC;
+				goto free_block;
+			}
+
+			indir2_block = allocated[1];
+
+			memset(ospfs_block(indir2_block), 0, OSPFS_BLKSIZE);
+		}
+		else // otherwise use the existing double indirect block
+		{
+			indir2_block = oi->oi_indirect2;
+		}
+
+		indir2_data = ospfs_block(indir2_block);
+		// Allocate the indirect block if needed
+		if(indir2_data[index_indir] == 0)
+		{
+			if((allocated[0] = allocate_block()) == 0){
+				r = -ENOSPC;
+				goto free_block;
+			}
+
+			indir_block = allocated[0];
+
+			memset(ospfs_block(indir_block), 0, OSPFS_BLKSIZE);
+		}
+	} 
+
+	else if(oi->oi_indirect == 0)
+	{
+		if((allocated[0] = allocate_block()) == 0)
+			goto free_block;
+
+		indir_block = allocated[0];
+
+		memset(ospfs_block(indir_block), 0, OSPFS_BLKSIZE);
+	}
+
+	indir_data = ospfs_block(indir_block);
+	if(indir_data[index_direct] != 0)
+	{
+		r = -EIO;
+		goto free_block;
+	}
+
+	// Allocate the actual block
+	if((indir_data[index_direct] = allocate_block()) == 0) {
+		r = -ENOSPC;
+		goto free_block;
+	}
+
+	memset(ospfs_block(indir_data[index_direct]), 0, OSPFS_BLKSIZE);
+
+	// Set all inode variables as necessary
+	oi->oi_size += OSPFS_BLKSIZE;
+
+	if(index_indir2 == 0)
+	{
+		if(oi->oi_indirect2 == 0)
+			oi->oi_indirect2 = indir2_block;
+
+
+		if(indir_data[index_indir] == 0)
+			indir_data[index_indir] = indir_block;
+	}
+	else if(oi->oi_indirect == 0)
+	{
+		oi->oi_indirect = indir_block;
+	}
+
+	return 0;
+
+	free_block:
+		if(allocated[0] != 0)
+			free_block(allocated[0]);
+		if(allocated[1] != 0)
+			free_block(allocated[1]);
+		return r;
 
 }
 
@@ -1207,8 +1308,48 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
+	ospfs_inode_t *inode;
+	ospfs_direntry_t *dir_entry;
+
+
+
 	/* EXERCISE: Your code here. */
-	return -EINVAL; // Replace this line
+
+
+	// check if name too long
+	if (dentry->d_name.len > OSPFS_MAXNAMELEN)
+        return -ENAMETOOLONG;
+	// check if directory entry already exists
+	if (find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len))
+		return -EEXIST;
+
+	dir_entry = create_blank_direntry(dir_oi);
+	if (IS_ERR(dir_entry))
+		return PTR_ERR(dir_entry);
+
+	//Find an empty inode.
+	while(entry_ino != ospfs_super->os_ninodes) {
+		inode = ospfs_inode(entry_ino);
+		if(inode == NULL)
+			return -EIO;
+		if(inode->oi_nlink == 0)
+			break;
+		entry_ino++;
+	}
+	if (entry_ino == ospfs_super->os_ninodes)
+		return -ENOSPC;
+
+	inode->oi_size = 0;
+	inode->oi_ftype = OSPFS_FTYPE_REG;
+	inode->oi_nlink = 1;
+	inode->oi_mode = mode;
+	inode->oi_direct[0] = 0;
+
+	dir_oi->oi_nlink++;
+
+	dir_entry->od_ino = entry_ino;
+	memcpy(dir_entry->od_name, dentry->d_name.name, dentry->d_name.len);
+	dir_entry->od_name[dentry->d_name.len] = '\0';
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
