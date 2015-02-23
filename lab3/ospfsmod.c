@@ -898,67 +898,8 @@ remove_block(ospfs_inode_t *oi)
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
-	if(n == 0)
-		return 0;
-	else if (n < 0)
-		return -EIO;
-	else
-		n--;	// to start index at 0
-
-	int32_t indir2 = indir2_index(n);
-	int32_t indir = indir_index(n);
-	int32_t direct = direct_index(n);
-
-	if(indir == -1) {
-		if(oi->oi_direct[direct] == 0)
-			return -EIO;
-		free_block(oi->oi_direct[direct]);
-		oi->oi_direct[direct] = 0;
-		oi->oi_size = n*OSPFS_BLKSIZE;
-		return 0;
-	}
-
-	uint32_t indir_block = 0;
-	uint32_t doubly_indir_block = 0;
-
-	uint32_t *indir_data = NULL;
-	uint32_t *doubly_indir_data = NULL;
-
-	if(indir2 == 0) {
-		if(oi->oi_indirect2 == 0)
-			return -EIO;
-
-		indir_block = oi->oi_indirect;
-		indir_data = osfps_block(indir_block);
-
-		doubly_indir_block = oi->oi_indirect2;
-		doubly_indir_data = osfps_block(doubly_indir_block);
-	} else {
-		indir_block = oi->oi_indirect;
-		indir_data = osfps_block(indir_block);
-	}
-
-	if(indir_data == NULL)
-		return -EIO;
-
-	free_block(indir_data[direct]);
-	indir_data[direct] = 0;
-	oi->oi_size = n * OSPFS_BLKSIZE;
-
-	if(direct == 0) {
-		free_block(indir_block);
-		if(indir2 == -1)
-			oi->oi_indirect = 0;
-		else
-			doubly_indir_data[indir] = 0;
-
-		if(indir == 0 && indir2 == 0) {
-			free_block(doubly_indir_block);
-			oi->oi_indirect2 = 0;
-		}
-	}
-
-	return 0;
+	/* EXERCISE: Your code here */
+	return -EIO; // Replace this line
 }
 
 
@@ -1002,24 +943,30 @@ static int
 change_size(ospfs_inode_t *oi, uint32_t new_size)
 {
 	uint32_t old_size = oi->oi_size;
+	uint32_t final_size = (old_size > new_size ? new_size : old_size);
 	int r = 0;
 
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
+		r = add_block(oi);
 
-
-
-
-		return -EIO; // Replace this line
+		// If no space is left, reset the file back to the old size
+		// The second loop will take care of this if we modify new_size
+		if(r == -ENOSPC)
+		{
+			new_size = old_size;
+			break;
+		}
+		else if(r == -EIO)
+			return -EIO;
 	}
 	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+		if(remove_block(oi) == -EIO)
+			return -EIO;
 	}
 
-	/* EXERCISE: Make sure you update necessary file meta data
-	             and return the proper value. */
-	return -EIO; // Replace this line
+	// Reset the size back to what it was if the file grew, or down to what it shrank to
+	oi->oi_size = final_size;
+	return r;
 }
 
 
