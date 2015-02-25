@@ -1242,7 +1242,25 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	//    entries and return one of them.
 
 	/* EXERCISE: Your code here. */
-	return ERR_PTR(-EINVAL); // Replace this line
+
+	ospfs_direntry_t *dir_entry;
+	int retval;
+	int offset;
+
+	for(offset = 0; offset < dir_oi->oi_size; offset += OSPFS_DIRENTRY_SIZE)
+	{
+		dir_entry = ospfs_inode_data(dir_oi, offset);
+		if(dir_entry->od_ino == 0)
+			return dir_entry;
+	}
+
+	//If no entries are empty, add a block to the directory.
+
+	if ((retval = add_block(dir_oi)) < 0)
+		return ERR_PTR(retval);
+
+	dir_entry = ospfs_inode_data(dir_oi, offset);
+	return dir_entry;
 }
 
 // ospfs_link(src_dentry, dir, dst_dentry
@@ -1277,7 +1295,26 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
 	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+	ospfs_inode_t *src_oi = ospfs_inode(src_dentry->d_inode->i_ino);
+	ospfs_direntry_t* entry;
+
+	if(dst_dentry->d_name.len > OSPFS_MAXSYMLINKLEN)
+		return -ENAMETOOLONG;
+	if (find_direntry(ospfs_inode(dir->i_ino), dst_dentry->d_name.name, dst_dentry->d_name.len))
+		return -EEXIST;
+
+	if (IS_ERR(entry))
+		return PTR_ERR(entry);
+
+	entry->od_ino = src_dentry->d_inode->i_ino;
+	memcpy(entry->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
+	entry->od_name[dst_dentry->d_name.len] = '\0';
+
+	src_oi->oi_nlink++;
+	dir_oi->oi_nlink++;
+
+	return 0;
 }
 
 // ospfs_create
