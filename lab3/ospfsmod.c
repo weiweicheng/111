@@ -1496,7 +1496,25 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	uint32_t entry_ino = 0;
 
 	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	
+	ospfs_symlink_inode_t *s_link = NULL;	// new one
+	ospfs_direntry_t *d_entry;
+
+	// Check to see if name is too long
+	if(dentry->d_name.len > OSPFS_MAXNAMELEN || strlen(symname) > OSPFS_MAXSYMLINKLEN)
+		return -ENAMETOOLONG;
+	// Check to see if file name exists already
+	else if(find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len))
+		return -EEXIST;
+	// overflow?
+
+	entry_ino = ospfs_create(dir, dentry, dir_oi->oi_mode, NULL);
+	
+
+
+
+
+
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
