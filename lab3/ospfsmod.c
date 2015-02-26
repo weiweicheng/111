@@ -1518,13 +1518,45 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	uint32_t entry_ino = 0;
 
 	/* EXERCISE: Your code here. */
+
+	ospfs_symlink_inode_t *s_link = NULL;	// new one
+	ospfs_direntry_t *d_entry;
+	ospfs_inode_t *n_inode = NULL;
+	
+	// Overflow check
 	if (dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink + 1	== 0)
 		return -EIO;
-	if(dentry->d_name.len > OSPFS_MAXSYMLINKLEN)
+	// Name length check
+	else if(dentry->d_name.len > OSPFS_MAXSYMLINKLEN || strlen(symname) > OSPFS_MAXSYMLINKLEN)
 		return -ENAMETOOLONG;
-	if (find_direntry(ospfs_inode(dir->i_ino), dentry->d_name.name, dentry->d_name.len))
+	// Existing entry check
+	else if (find_direntry(ospfs_inode(dir->i_ino), dentry->d_name.name, dentry->d_name.len))
 		return -EEXIST;
 
+
+	// find a free inode
+	for(entry_ino = 2; entry_ino < ospfs_super->os_ninodes; entry_ino++) {
+		n_inode = ospfs_inode(entry_ino);
+		// if there are no links, it's free
+		if(n_inode->oi_nlink == 0)
+			break;
+	}
+
+	// checking values
+	if(entry_ino == ospfs_super->os_ninodes)
+		return -ENOSPC;
+	else if(n_inode == NULL)
+		return -EIO;
+
+	d_entry = create_blank_direntry(dir_oi);
+	if(IS_ERR(d_entry))
+		return PTR_ERR(d_entry);
+
+	// copying over information
+	strcpy(s_link->oi_symlink, symname);
+	s_link->oi_size = strlen(symname);
+	s_link->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	s_link->oi_nlink = 1;
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
