@@ -554,6 +554,12 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 
 	od->od_ino = 0;
 	oi->oi_nlink--;
+
+	dir_oi->oi_nlink--;
+
+	
+	if (oi->oi_nlink == 0 && oi->oi_ftype != OSPFS_FTYPE_SYMLINK)
+		change_size(oi, 0);
 	return 0;
 }
 
@@ -1552,6 +1558,8 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
 	// Exercise: Your code here.
+	if (!oi->oi_size || (oi->oi_ftype != OSPFS_FTYPE_SYMLINK))
+		return ERR_PTR(-EINVAL);
 
 	nd_set_link(nd, oi->oi_symlink);
 	return (void *) 0;
