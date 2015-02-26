@@ -29,7 +29,7 @@
  * KERN_EMERG so that you are sure to see the messages.  By default, the
  * kernel does not print all messages to the console.  Levels like KERN_ALERT
  * and KERN_EMERG will make sure that you will see messages.) */
-#define eprintk(format, ...) printk(KERN_NOTICE format, ## __VA_ARGS__)
+#define eprintk(format, ...) printk(KERN_EMERG format, ## __VA_ARGS__)
 
 // The actual disk data is just an array of raw memory.
 // The initial array is defined in fsimg.c, based on your 'base' directory.
@@ -1517,11 +1517,9 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
 
-	/* EXERCISE: Your code here. */
-
+	ospfs_direntry_t *d_entry = NULL;
+	ospfs_inode_t *n_inode = NULL;	
 	ospfs_symlink_inode_t *s_link = NULL;	// new one
-	ospfs_direntry_t *d_entry;
-	ospfs_inode_t *n_inode = NULL;
 	
 	// Overflow check
 	if (dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink + 1	== 0)
@@ -1542,6 +1540,8 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 			break;
 	}
 
+	s_link = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
+
 	// checking values
 	if(entry_ino == ospfs_super->os_ninodes)
 		return -ENOSPC;
@@ -1552,22 +1552,30 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	if(IS_ERR(d_entry))
 		return PTR_ERR(d_entry);
 
-	// copying over information
-	strcpy(s_link->oi_symlink, symname);
 	s_link->oi_size = strlen(symname);
+	strncpy(s_link->oi_symlink, symname, s_link->oi_size);
+	s_link->oi_symlink[s_link->oi_size] = '\0';
+	
+
 	s_link->oi_ftype = OSPFS_FTYPE_SYMLINK;
 	s_link->oi_nlink = 1;
 
-	/* Execute this code after your function has successfully created the
-	   file.  Set entry_ino to the created file's inode number before
-	   getting here. */
+	strncpy(d_entry->od_name, dentry->d_name.name, dentry->d_name.len);
+	d_entry->od_name[dentry->d_name.len] = 0;
+	d_entry->od_ino = entry_ino;
+
+	dir_oi->oi_nlink++;
+
+	// Instructor-provided code
 	{
 		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
+	
 		if (!i)
 			return -ENOMEM;
 		d_instantiate(dentry, i);
-		return 0;
 	}
+
+	return 0;
 }
 
 
@@ -1578,7 +1586,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 //   Inputs: dentry -- the symbolic link's directory entry
 //           nd     -- to be filled in with the symbolic link's destination
 //
-//   Exercise: Expand this function to handle conditional symlinks.  Conditional
+//   COMPLETED Exercise: Expand this function to handle conditional symlinks.  Conditional
 //   symlinks will always be created by users in the following form
 //     root?/path/1:/path/2.
 //   (hint: Should the given form be changed in any way to make this method
@@ -1589,11 +1597,35 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
-	// Exercise: Your code here.
-	if (!oi->oi_size || (oi->oi_ftype != OSPFS_FTYPE_SYMLINK))
-		return ERR_PTR(-EINVAL);
+	
+	uint32_t colon_loc;
+	//eprintk("%s\n", oi->oi_symlink);
 
-	nd_set_link(nd, oi->oi_symlink);
+	//Not a conditional link
+	if (strncmp(oi->oi_symlink, "root?", 5) != 0)
+	{
+		//eprintk("Not conditional link\n");
+		nd_set_link(nd, oi->oi_symlink);
+		return (void *) 0;
+	}
+	if (strchr(oi->oi_symlink, ':') == NULL)
+		return ERR_PTR(-EIO);
+	colon_loc= strchr(oi->oi_symlink, ':') - oi->oi_symlink;
+	// If root user, then use first part
+	if(current->uid == 0)
+	{
+		oi->oi_symlink[colon_loc] = '\0';
+		//eprintk("Root: %s\n", oi->oi_symlink + 5);
+		nd_set_link(nd, oi->oi_symlink + 5);
+	}
+	//Otherwise use second
+	else
+	{
+		//eprintk("Not Root: %s\n", oi->oi_symlink + colon_loc + 1);
+		nd_set_link(nd, oi->oi_symlink + colon_loc + 1);
+
+	}
+
 	return (void *) 0;
 }
 
