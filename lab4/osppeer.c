@@ -478,7 +478,11 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 		error("* Error while allocating task");
 		goto exit;
 	}
+
+	if ((unsigned) strlen(filename) >= FILENAMESIZ)
+		error("Filename is too long. Truncating file name\n");
 	strncpy(t->filename, filename, FILENAMESIZ);
+	t->filename[FILENAMESIZ-1] = '\0';
 
 	// add peers
 	s1 = tracker_task->buf;
@@ -632,6 +636,10 @@ static task_t *task_listen(task_t *listen_task)
 //	the requested file.
 static void task_upload(task_t *t)
 {
+	char file_path_buf[PATH_MAX+1], curr_path_buf[PATH_MAX+1];
+	char *curr_path, *file_path;
+	struct stat data;
+
 	assert(t->type == TASK_UPLOAD);
 	// First, read the request from the peer.
 	while (1) {
@@ -654,6 +662,31 @@ static void task_upload(task_t *t)
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
 		error("* Cannot open file %s", t->filename);
+		goto exit;
+	}
+
+	//Robustness edits
+
+	curr_path = getcwd(curr_path_buf, PATH_MAX + 1);
+	file_path = realpath(t->filename, file_path_buf);
+
+	if (!curr_path) {
+		error("* Can't find current directory\n");
+		goto exit;
+	}
+
+	if (!file_path) {
+		error("* Invalid file path\n");
+		goto exit;
+	}
+
+	if (stat(file_path, &data) < 0) {
+		error("* Specified file does not exist\n");
+		goto exit;
+	}
+
+	if (strncmp(curr_path, file_path, strlen(curr_path))) {
+		error("* Provided filename wasn't found in the current directory\n");
 		goto exit;
 	}
 
