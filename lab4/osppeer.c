@@ -695,7 +695,7 @@ int main(int argc, char *argv[])
 	int num_processes = 0;
 
 	// Default tracker is read.cs.ucla.edu
-	osp2p_sscanf("131.179.80.139:11111", "%I:%d",
+	osp2p_sscanf("164.67.100.231:12997", "%I:%d",
 		     &tracker_addr, &tracker_port);
 	if ((pwent = getpwuid(getuid()))) {
 		myalias = (const char *) malloc(strlen(pwent->pw_name) + 20);
@@ -784,7 +784,7 @@ int main(int argc, char *argv[])
 		waitpid(-1, NULL, 0);
 			
 
-	// Then accept connections from other peers and upload files to them!
+	//Then accept connections from other peers and upload files to them!
 	while ((t = task_listen(listen_task))) {
 		pid_t pid;
 		waitpid(-1, NULL, WNOHANG);
