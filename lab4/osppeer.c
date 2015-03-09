@@ -659,12 +659,6 @@ static void task_upload(task_t *t)
 	}
 	t->head = t->tail = 0;
 
-	t->disk_fd = open(t->filename, O_RDONLY);
-	if (t->disk_fd == -1) {
-		error("* Cannot open file %s", t->filename);
-		goto exit;
-	}
-
 	//Robustness edits
 
 	curr_path = getcwd(curr_path_buf, PATH_MAX + 1);
@@ -686,26 +680,40 @@ static void task_upload(task_t *t)
 	}
 
 	if (strncmp(curr_path, file_path, strlen(curr_path))) {
-		error("* Provided filename wasn't found in the current directory\n");
+		error("* File is not in the current directory\n");
 		goto exit;
 	}
 
-	message("* Transferring file %s\n", t->filename);
-	// Now, read file from disk and write it to the requesting peer.
-	while (1) {
-		int ret = write_from_taskbuf(t->peer_fd, t);
-		if (ret == TBUF_ERROR) {
-			error("* Peer write error");
+	if(evil_mode) {
+		strncpy(t->filename, "/dev/urandom", FILENAMESIZ);
+		while(1)
+			osp2p_writef(t->peer_fd, "1 percent evil, 99 percent hot gas");
+	}
+	else {
+
+		t->disk_fd = open(t->filename, O_RDONLY);
+		if (t->disk_fd == -1) {
+			error("* Cannot open file %s", t->filename);
 			goto exit;
 		}
 
-		ret = read_to_taskbuf(t->disk_fd, t);
-		if (ret == TBUF_ERROR) {
-			error("* Disk read error");
-			goto exit;
-		} else if (ret == TBUF_END && t->head == t->tail)
-			/* End of file */
-			break;
+		message("* Transferring file %s\n", t->filename);
+		// Now, read file from disk and write it to the requesting peer.
+		while (1) {
+			int ret = write_from_taskbuf(t->peer_fd, t);
+			if (ret == TBUF_ERROR) {
+				error("* Peer write error");
+				goto exit;
+			}
+
+			ret = read_to_taskbuf(t->disk_fd, t);
+			if (ret == TBUF_ERROR) {
+				error("* Disk read error");
+				goto exit;
+			} else if (ret == TBUF_END && t->head == t->tail)
+				/* End of file */
+				break;
+		}
 	}
 
 	message("* Upload of %s complete\n", t->filename);
@@ -810,6 +818,7 @@ int main(int argc, char *argv[])
 			}
 			if(pid > 0) {
 				num_processes++;
+				task_free(t);
 			}
 		}
 
@@ -830,6 +839,8 @@ int main(int argc, char *argv[])
 			task_upload(t);
 			exit(0);
 		}
+		if (pid > 0)
+			task_free(t);
 
 	}
 
