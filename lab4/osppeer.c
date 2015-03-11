@@ -30,6 +30,8 @@ int evil_mode;			// nonzero iff this peer should behave badly
 static struct in_addr listen_addr;	// Define listening endpoint
 static int listen_port;
 
+#define MD5_LENGTH 128
+
 
 /*****************************************************************************
  * TASK STRUCTURE
@@ -68,6 +70,7 @@ typedef struct task {
 
 	char filename[FILENAMESIZ];	// Requested filename
 	char disk_filename[FILENAMESIZ]; // Local filename (TASK_DOWNLOAD)
+	char digest[MD5_LENGTH];
 
 	peer_t *peer_list;	// List of peers that have 'filename'
 				// (TASK_DOWNLOAD).  The task_download
@@ -75,6 +78,33 @@ typedef struct task {
 				// task_pop_peer() removes peers from it, one
 				// at a time, if a peer misbehaves.
 } task_t;
+
+#define MD5_COMPUTE_BUFFER_SIZ 3096 
+int calculate_digest(char *fn, char *digest)
+{
+	char buf[MD5_COMPUTE_BUFFER_SIZ + 1];
+	md5_state_t s;
+	md5_init(&s);
+
+	int read_size;
+
+	int file = open(fn, O_RDONLY);
+
+	if (file) {
+		buf[MD5_COMPUTE_BUFFER_SIZ] = '\0';
+		while (1) {
+			if((read_size = (int) read(file, buf, MD5_COMPUTE_BUFFER_SIZ)) == 0)
+				break;
+			md5_append(&s, (md5_byte_t*) buf, read_size);
+		}
+		read_size = md5_finish_text(&s, digest, 1);
+		digest[read_size] = '\0';
+		close(file);
+		return read_size;
+	}
+	else
+		return 0;
+}
 
 
 // task_new(type)
@@ -464,6 +494,25 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 	size_t messagepos;
 	assert(tracker_task->type == TASK_TRACKER);
 
+	if (strlen(filename) > 0) {
+		message("* Getting checksum for '%s'\n", filename);
+		osp2p_writef(tracker_task->peer_fd, "MD5SUM %s\n", filename);
+		messagepos = read_tracker_response(tracker_task);
+
+		s1 = tracker_task->buf;
+		s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1);
+
+		if(tracker_task->buf[messagepos] == '2') {
+			osp2p_snscanf(s1, (s2 - s1), "%s\n", tracker_task->digest);
+			tracker_task->digest[MD5_LENGTH - 1] = '\0';
+
+			//Not a valid digest length
+			if (strlen(tracker_task->digest) < 5)
+				strcpy(tracker_task->digest, "");
+
+		}
+	}
+
 	message("* Finding peers for '%s'\n", filename);
 
 	osp2p_writef(tracker_task->peer_fd, "WANT %s\n", filename);
@@ -581,6 +630,27 @@ static void task_download(task_t *t, task_t *tracker_task)
 	if (t->total_written > 0) {
 		message("* Downloaded '%s' was %lu bytes long\n",
 			t->disk_filename, (unsigned long) t->total_written);
+
+		if (strlen(tracker_task->digest) > 0) {
+			char check_digest[MD5_LENGTH];
+
+			if (calculate_digest(t->disk_filename, check_digest) == 0) {
+				message("* Digest failure for '%s'. Aborting.\n", t->disk_filename);
+				unlink(t->disk_filename);
+				task_free(t);
+				return;
+			}
+
+			if (strcmp(check_digest, tracker_task->digest) == 0) {
+				message("* The hash matches the file \n");
+			} else {
+				message("* Hash mismatch for '%s'. Saved '%s' does not match stated '%s'.\n", t->filename, check_digest, tracker_task->digest);
+				unlink(t->disk_filename);
+				task_free(t);
+				return;
+			}
+		}
+
 		// Inform the tracker that we now have the file,
 		// and can serve it to others!  (But ignore tracker errors.)
 		if (strcmp(t->filename, t->disk_filename) == 0) {
