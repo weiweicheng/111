@@ -635,7 +635,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 			char check_digest[MD5_LENGTH];
 
 			if (calculate_digest(t->disk_filename, check_digest) == 0) {
-				message("* Digest failure for '%s'. Aborting.\n", t->disk_filename);
+				message("* Digest cannot be calculated for file: '%s'.\n", t->disk_filename);
 				unlink(t->disk_filename);
 				task_free(t);
 				return;
@@ -644,7 +644,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 			if (strcmp(check_digest, tracker_task->digest) == 0) {
 				message("* The hash matches the file \n");
 			} else {
-				message("* Hash mismatch for '%s'. Saved '%s' does not match stated '%s'.\n", t->filename, check_digest, tracker_task->digest);
+				message("* Hash mismatch for '%s'. The file has hash: '%s' when it should have: '%s'.\n", t->filename, check_digest, tracker_task->digest);
 				unlink(t->disk_filename);
 				task_free(t);
 				return;
