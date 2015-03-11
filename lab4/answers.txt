@@ -36,10 +36,18 @@ to a local variable without a bound. This is fixed by adding a bound when doing 
 # EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
 #    each)
 
+Other fixes included increasing the task buffer size, allowing more connections to the tracker. We also set checks to make sure that the peer is not requesting a file that is not in the current directory. 
+
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
 
+Upload Attacks:
+We set is so that the file name that's requested gets randomized from /dev/urandom. We also made it so that it would send an infinite stream of requests.
+
+Download Attacks:
+We did a DOS attack that opened up tons of sockets against peers.
+
 # Extra credit problems
-#Extra credit problem: none
+#Extra credit problem: MD5 Checker.
 
 # Add any other information you'd like us to know below this line.
