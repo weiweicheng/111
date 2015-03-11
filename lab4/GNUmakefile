@@ -37,8 +37,15 @@ run-bad: osppeer
 	@-/bin/rm -rf test
 	@echo + mkdir test
 	@mkdir test
-	@echo + ./osppeer -dtest -t11114 cat1.jpg cat2.jpg cat3.jpg
-	@./osppeer -dtest -t11114 cat1.jpg cat2.jpg cat3.jpg
+	@echo + ./osppeer -dtest -t131.179.80.13:11111 cat1.jpg cat2.jpg cat3.jpg
+	@./osppeer -dtest -t131.179.80.13:11111 cat1.jpg cat2.jpg cat3.jpg
+
+run-attack: osppeer
+	@-/bin/rm -rf test
+	@echo + mkdir test
+	@mkdir test
+	@echo + ./osppeer -b -dtest -t131.179.80.13:11111 cat1.jpg cat2.jpg cat3.jpg
+	@./osppeer -b -dtest -t131.170.80.13:11111 cat1.jpg cat2.jpg cat3.jpg
 
 run-popular: osppeer
 	@-/bin/rm -rf test

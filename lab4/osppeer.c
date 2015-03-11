@@ -26,6 +26,7 @@
 #include "osp2p.h"
 
 int evil_mode;			// nonzero iff this peer should behave badly
+#define ATTACKS 15000
 
 static struct in_addr listen_addr;	// Define listening endpoint
 static int listen_port;
